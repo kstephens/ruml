@@ -138,16 +138,16 @@ module UML
         end
 
         association \
-        nil, Relationship, :*,                     { :navigable => false },
-        :relatedElement, Ownerships::Element, 1..N { :readOnly => true, :union => true }
+        nil,             Relationship,        :*,     { :navigable => false },
+        :relatedElement, Ownerships::Element, '1..N', { :readOnly => true, :union => true }
 
         association \
-        nil, Relationship, :*,                     { :navigable => false },
-        :source, Ownerships::Element, 1..N { :subsets => :relatedElement, :readOnly => true, :union => true }
+        nil,     Relationship,        :*,     { :navigable => false },
+        :source, Ownerships::Element, '1..N', { :subsets => :relatedElement, :readOnly => true, :union => true }
 
         association \
-        nil, Relationship, :*,                     { :navigable => false },
-        :target, Ownerships::Element, 1..N { :subsets => :relatedElement, :readOnly => true, :union => true }
+        nil,     Relationship,        :*,     { :navigable => false },
+        :target, Ownerships::Element, '1..N', { :subsets => :relatedElement, :readOnly => true, :union => true }
 
       end # Relationships
 

@@ -1,5 +1,5 @@
 require 'pp'
-$: << 'lib'
+$: << File.expand_path(File.dirname(__FILE__) + '/lib')
 
 begin
   require 'ruml'
