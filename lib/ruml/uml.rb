@@ -19,6 +19,8 @@ module UML
             x == :true
           when 'true', 'false'
             x == 'true'
+          when '1', '0'
+            x != '0'
           else
             raise ArgumentError, "given #{self}"
           end
@@ -125,6 +127,31 @@ module UML
         end
       end # Ownerships
 
+
+      module Relationships
+        module Relationship
+          include Ownerships::Element
+        end
+
+        module DirectedRelationship
+          include Relationship
+        end
+
+        association \
+        nil, Relationship, :*,                     { :navigable => false },
+        :relatedElement, Ownerships::Element, 1..N { :readOnly => true, :union => true }
+
+        association \
+        nil, Relationship, :*,                     { :navigable => false },
+        :source, Ownerships::Element, 1..N { :subsets => :relatedElement, :readOnly => true, :union => true }
+
+        association \
+        nil, Relationship, :*,                     { :navigable => false },
+        :target, Ownerships::Element, 1..N { :subsets => :relatedElement, :readOnly => true, :union => true }
+
+      end # Relationships
+
+
       module Namespaces
         module NamedElement
           include Ownerships::Element
@@ -159,6 +186,30 @@ module UML
 
       end # Namespaces
 
+      
+      module Expressions
+        module ValueSpecification
+          include Ownerships::Element
+        end
+
+        class OpaqueExpression
+          include RUML::Support::Instantiable
+          include ValueSpecification
+          property :body, String, :*, { :ordered => true }
+          property :language, String, :*, { :ordered => true }
+        end
+
+        class Expression
+          include RUML::Support::Instantiable
+          include ValueSpecification
+          property :symbol, String
+        end
+
+        association \
+        :expression, Expression,         0..1, { :subsets => :owner, :aggregation => true },
+        :operand,    ValueSpecification, :*,   { :subsets => :ownedElement, :ordered => true }        
+      end # Expressions
+
 
       module Classifiers
         module Classifier
@@ -188,6 +239,14 @@ module UML
         nil, TypedElement, :*, { :navigable => false },
         :type, Type, 0..1, { }
       end # TypedElements
+
+
+      module StructuralFeatures
+        module StructuralFeature
+          include TypedElements::TypedElement
+          include Classifiers::Feature
+        end
+      end # StructuralFeatures
 
 
       # imports PrimitiveTypes
@@ -409,15 +468,15 @@ module UML
 
       association \
       :owningPackage,    Package,            0..1, { :subsets => :namespace, :aggregation => true },
-      :packagedElement,  PackageableElement, *,    { :subsets => :ownedMember }
+      :packagedElement,  PackageableElement, :*,   { :subsets => :ownedMember }
 
       association \
-      :package,    Package,            0..1, { :subsets => :namespace, :aggregation => true },
-      :ownedType,  Type, *,    { :subsets => :packagedElement }
+      :package,    Package, 0..1, { :subsets => :namespace, :aggregation => true },
+      :ownedType,  Type,    :*,   { :subsets => :packagedElement }
 
       association \
       :nestingPackage,   Package, 0..1, { :subsets => :namespace, :aggregation => true },
-      :nestedPackage,    Package, *,    { :subsets => :packagedElement }
+      :nestedPackage,    Package, :*,   { :subsets => :packagedElement }
 
       class Association
         include RUML::Support::Instantiable

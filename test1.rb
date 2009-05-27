@@ -3,7 +3,7 @@ $: << 'lib'
 
 begin
   require 'ruml'
-  pp RUML::Support::Instantiable::INSTANTIABLE_CLASSES
+  # pp RUML::Support::Instantiable::INSTANTIABLE_CLASSES
 
   f = RUML::Support::Factory.new
 
