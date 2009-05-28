@@ -133,6 +133,15 @@ module RUML
       result
     end
 
+    def method *args, &blk
+      name = args.pop
+      if args.include?(:class)
+        @target.meta_def name, &blk 
+      else
+        @target.class_def name, &blk
+      end
+    end
+
     def method_missing sel, *args, &blk
       sel_s = sel.to_s
       case sel_s
@@ -168,4 +177,24 @@ end # RUML
 Module.instance_eval do
   include RUML::Builder::ModuleHelper
 end
+
+
+# http://whytheluckystiff.net/articles/seeingMetaclassesClearly.html
+class Object
+  # The hidden singleton lurks behind everyone
+  def metaclass; class << self; self; end; end
+  def meta_eval &blk; metaclass.instance_eval &blk; end
+  
+  # Adds methods to a metaclass
+  def meta_def name, &blk
+    meta_eval { define_method name, &blk }
+  end
+  
+  # Defines an instance method within a class
+  def class_def name, &blk
+    class_eval { define_method name, &blk }
+  end
+end
+
+
 
