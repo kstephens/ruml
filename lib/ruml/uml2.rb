@@ -9,7 +9,7 @@ module RUML
           _class :Boolean do
             stereotype :primitive
 
-            method :class, :coerce do | x |
+            method :coerce, :class do | x |
               case x
               when true, false
                 x == true
@@ -30,7 +30,7 @@ module RUML
           _class :String do
             stereotype :primitive
 
-            method :class, :coerce do | x |
+            method :coerce, :class do | x |
               x.to_s
             end
           end # String
@@ -38,19 +38,19 @@ module RUML
           _class :Integer do
             stereotype :primitive
 
-            method :class, :coerce do | x |
+            method :coerce, :class do | x |
               x.to_i
             end
           end # Integer
 
-          _class :UnlimitedNatural, Integer do 
+          _class :UnlimitedNatural, :Integer do 
             stereotype :primitive
 
             method :initialize do | rep |
               @rep = rep
             end
 
-            constant :INFINITY { new(:*) }
+            constant(:INFINITY) { new(:*) }
 
             method :to_s do
               @rep.to_s
@@ -64,33 +64,33 @@ module RUML
             end
 
             method :<= do | x |
-              x != INFINITY
+              x != self.INFINITY
             end
 
-        def > x
-          x != INFINITY
-        end
+            method :> do | x |
+              x != self.INFINITY
+            end
 
-        def < x
-          x != INFINITY
-        end
+            method :< do | x |
+              x != self.INFINITY
+            end
 
+            method :coerce, :class do | x |
+              $stderr.puts "#{self}.coerce #{x.inspect}"
+              case x
+              when :*, '*'
+                self.INFINITY
+              else
+                i = x.to_i
+                raise ArgumentError, "not greater than zero" unless i > 0
+                i
+              end
+            end
+          end # 
 
-        def self.coerce x
-          case x
-          when :*, '*'
-            INFINITY
-          else
-            i = x.to_i
-            raise ArgumentError, "not greater than zero" unless i > 0
-            i
-          end
-        end
-      end
+        end # PrimitiveTypes
 
-    end # PrimitiveTypes
-
-
+=begin
     module Abstractions
 
       module Elements
@@ -487,11 +487,16 @@ module RUML
         include Namespaces::NamedElement
       end
     end # Constructs
-    
-  end # Core
+=end
 
+      end # Core
+
+=begin
   module Profiles
   end # Profiles
+=end
+
+    end # Builder.new
 
   end # UML2
 end # RUML
