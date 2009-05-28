@@ -31,7 +31,7 @@ module Support
     end
 
 
-    def _property cls, name, type = nil, mutiplicity = nil, opts = nil
+    def _property cls, name, type, mutiplicity = nil, opts = nil
       multiplicity ||= 1 .. 1
       multiplicity = _coerce_multiplicity multiplicity
       opts ||= EMPTY_HASH
@@ -160,99 +160,14 @@ RUBY
         name = o[:name]
         type = o[:type]
         multiplicity = o[:multiplicity]
+        
+        subsets = o[:subsets]
+        subsets = [ subsets ] unless Array === subsets
+        subsets = subsets.compact
 
-        if subsets = o[:subsets]
-          subsets = [ subsets ] unless Array === subsets
-          case multiplicity.end
-          when 1
-            _class_eval etype, <<"RUBY", __FILE__, __LINE__
-  # AssociationEnd #{name} : #{type} #{multiplicity} subsets #{subsets.inspect}
-  def #{name}
-    __cur = #{subsets}
-    #{type} === __cur ? __cur : nil
-  end
-  def multi_#{name}
-    __cur = #{subsets}
-    #{type} === __cur ? [ __cur ] : [ ]
-  end
-  def #{name}= __val
-    return self if __val.nil?
-    raise ArgumentError, "#{name}=: expected #{type}" unless #{type} === __val
-    clear_#{name}!
-    add_#{name}! __val
-  end
-  def clear_#{name}!
-    multi_#{name}.each { | __val | remove_#{name}! __val }
-  end
-  def add_#{name}! __val
-    return self if __val.nil?
-    raise ArgumentError, "add_#{name}!: expected #{type}" unless #{type} === __val
-    __cur = #{subsets}
-    unless __cur == __val
-      raise ArgumentError, "add_#{name}!: already set" unless __cur.nil?
-      add_#{subsets}! __val
-      __val.add_#{ename}!(self)
-    end
-    self
-  end
-  def remove_#{name}! __val
-    return self if __val.nil?
-    raise ArgumentError, "remove_#{name}!: expected #{type}" unless #{type} === __val
-    __cur = #{subsets}
-    if __cur == __val
-      remove_#{subsets}! __cur
-      __val.remove_#{ename}!(self)
-    end
-    self
-  end
-RUBY
-
-          else
-            _class_eval etype, <<"RUBY", __FILE__, __LINE__
-  # AssociationEnd #{name} : #{type} #{multiplicity} subsets #{subsets.inspect}
-  def #{name}
-    __cur = #{subsets.map{|s| "multi_#{s}"}.join(' + ')}
-    __cur.select{ | __val | #{type} === __val }.uniq
-  end
-  alias :multi_#{name} :#{name}
-  def #{name}= __vals
-    clear_#{name}!
-    return self if __vals.nil?
-    __vals.each { | __val | add_#{name}! __val }
-    self
-  end
-  def clear_#{name}!
-    multi_#{name}.each { | __val | remove_#{name}! __val }
-    self
-  end
-  def add_#{name}! __val
-    return self if __val.nil?
-    raise ArgumentError, "add_#{name}!: expected #{type}" unless #{type} === __val
-      __cur = multi_#{name}
-    unless __cur.include?(__val)
-      #{subsets.map{|s| "add_#{s}!(__val)"}.join("; ")}
-      __val.add_#{ename}!(self)
-    end
-    self
-  end
-  def remove_#{name}! __val
-    return self if __val.nil?
-    raise ArgumentError, "remove_#{name}!: expected #{type}" unless #{type} === __val
-    __cur = multi_#{name}
-    if __cur.include?(__val)
-      #{subsets.map{|s| "remove_#{s}!(__val)"}.join("; ")}
-      __val.remove_#{ename}!(self)
-    end
-    self
-  end
-RUBY
-          end
-
-        else
-
-          case multiplicity.end
-          when 1
-            _class_eval etype, <<"RUBY", __FILE__, __LINE__
+        case multiplicity.end
+        when 1
+          _class_eval etype, <<"RUBY", __FILE__, __LINE__
   # AssociationEnd #{name} : #{type} #{multiplicity}
   def #{name}
     @#{name}
@@ -261,7 +176,7 @@ RUBY
     @#{name} ? [ @#{name} ] : [ ]
   end
   def #{name}= __val
-    raise ArgumentError, "#{name}: expected #{type}" unless #{type} === __val
+    raise ArgumentError, "#{name}: expected #{type}" unless __val.nil? || #{type} === __val
     clear_#{name}!
     add_#{name}! __val
   end
@@ -273,6 +188,7 @@ RUBY
     unless @#{name} == __val
       raise ArgumentError, "add_#{name}!: already set" unless @#{name}.nil?
       @#{name} = __val
+      #{subsets.map{|s| "add_#{s}!(__val)"} * '; '} # subsets #{subsets * ', '}
       __val.add_#{ename}!(self)
     end
     self
@@ -282,13 +198,14 @@ RUBY
     if @#{name} == __val
       raise ArgumentError, "remove_#{name}!: expected #{type}" unless #{type} === __val
       @#{name} = nil 
+      #{subsets.map{|s| "remove_#{s}!(__val)"} * '; '} # subsets #{subsets * ', '}
       __val.remove_#{ename}!(self)
     end
     self
   end
 RUBY
-          else
-            _class_eval etype, <<"RUBY", __FILE__, __LINE__
+        else
+          _class_eval etype, <<"RUBY", __FILE__, __LINE__
   # AssociationEnd #{name} : #{type} #{multiplicity}
   def #{name}
     @#{name} ||= [ ]
@@ -309,6 +226,7 @@ RUBY
     __cur = #{name}
     unless __cur.include?(__val)
       __cur.push(__val)
+      #{subsets.map{|s| "add_#{s}!(__val)"} * '; '} # subsets #{subsets * ', '}
       __val.add_#{ename}!(self)
     end
     self
@@ -319,12 +237,12 @@ RUBY
     __cur = #{name}
     if __cur.include?(__val)
       __cur.delete(__val)
+      #{subsets.map{|s| "remove_#{s}!(__val)"} * '; '} # subsets #{subsets * ', '}
       __val.remove_#{ename}(self)
     end
     self
   end
 RUBY
-          end
         end
       end
     end # def
@@ -423,25 +341,8 @@ RUBY
     end
     alias :initialize :_initialize
 
+  end 
 
-=begin
-    def method_missing sel, *args, &blk
-      $stderr.puts "  #{self.class}\#method_missing(#{sel.inspect}, #{args.inspect}) caller=#{caller.inspect}"
-      sel_s = sel.to_s
-      case
-      when block_given?
-        super
-      when args.size == 0 && sel_s =~ /\A(\w+)\Z/
-        instance_variable_get("@#{$1}")
-      when args.size == 1 && sel_s =~ /\A(\w+)=\Z/
-        instance_variable_set("@#{$1}", args.first)
-      else
-        super
-      end
-    end
-=end
-
-  end
 end # module
 
 end # module
