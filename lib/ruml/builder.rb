@@ -110,7 +110,11 @@ RUBY
       include RUML::Support::CodeGeneration
       EMPTY_ARRAY = [ ].freeze unless defined? EMPTY_ARRAY
 
+      # Inputs:
       attr_reader :target, :pass
+      
+      # Outputs:
+      attr_reader :created, :path_to_module
 
       def initialize opts = nil, &blk
         opts ||= { } # EMPTY_HASH
@@ -122,7 +126,7 @@ RUBY
         @current = nil
         @current_stack = [ ]
         @pass = 1
-        @rep_path_to_module = { }
+        @path_to_module = { }
         raise ArgumentError, ":target not a Module" unless Module === @target
       end
       
@@ -234,13 +238,13 @@ RUBY
           
         @created << target
           
-        if type == :Class && ! rep[:isAbstract]
+        if type == :class && ! rep[:isAbstract]
           target.instance_eval do 
             include RUML::Support::Instantiable
           end
         end
         
-        @rep_path_to_module[rep[:path]] = target
+        @path_to_module[rep[:path]] = target
         inside_namespace rep
 
         _log { "}" }
@@ -255,7 +259,7 @@ RUBY
       def inside_namespace rep
         begin
           @target_stack.push @target
-          @target = @rep_path_to_module[rep[:path]]
+          @target = @path_to_module[rep[:path]]
           @current_stack.push @current
           @current = rep
           send("in_namespace_#{pass}", rep)

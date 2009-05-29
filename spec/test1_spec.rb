@@ -1,7 +1,9 @@
 require 'pp'
-$: << File.expand_path(File.dirname(__FILE__) + '/lib')
+$: << File.expand_path(File.dirname(__FILE__) + '/../lib')
+$:.uniq!
 
-begin
+describe "test1" do
+  it "should handle Factory correctly" do
   require 'ruml'
   # pp RUML::Support::Instantiable::INSTANTIABLE_CLASSES
 
@@ -45,9 +47,7 @@ begin
   pp c1
   $f = f
   $cls1 = cls1
-rescue Exception => err
-  $stderr.puts "ERROR: #{err.inspect}\n#{err.backtrace * "\n"}"
-  raise err
-end
+  end # it
+end # describe
 
 

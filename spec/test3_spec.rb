@@ -1,14 +1,14 @@
 require 'pp'
-$: << File.expand_path(File.dirname(__FILE__) + '/lib')
+$: << File.expand_path(File.dirname(__FILE__) + '/../lib')
+$:.uniq!
 
-begin
+describe "UML2" do
+  it "should handle UnlimtedNatural" do
   require 'ruml/uml2'
 
   puts RUML::UML2::Core::PrimitiveTypes::UnlimitedNatural::INFINITY.inspect
   puts RUML::UML2::Core::PrimitiveTypes::UnlimitedNatural.coerce(:*)
-rescue Exception => err
-  $stderr.puts "ERROR: #{err.inspect}\n#{err.backtrace * "\n"}"
-  raise err
-end
+  end # it
+end # describe
 
 

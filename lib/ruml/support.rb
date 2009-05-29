@@ -4,11 +4,11 @@ module RUML
 module Support
   EMPTY_HASH = { }.freeze unless defined? EMPTY_HASH
   N = 1000000000000000 unless defined? N
-  STAR = 0 .. N unless defined? STAR
+  STAR = (0 .. N) unless defined? STAR
 
   module CodeGenerationCore
     def _class_eval cls, str, file, line
-      $stderr.puts "\nclass #{cls}\n#{str}\nend\n\n"
+      $stderr.puts "\nclass #{cls}\n#{str}\nend\n\n" if @verbose
       cls.class_eval str, file, line
     end
     
@@ -22,42 +22,86 @@ module Support
       when :*, '*'
         STAR
       when String
-        eval(m)
+        eval(m.sub(/\*/, N.to_s))
       else
         raise ArgumentError, "given #{m.inspect}"
       end
-      # $stderr.puts "  # _coerce_multiplicity #{m.inspect} => #{result.inspect}"
+      # $stderr.puts "  ### _coerce_multiplicity #{m.inspect} => #{result.inspect}"
       result
     end
 
 
-    def _generate_property cls, name, type, mutiplicity = nil, opts = nil
-      multiplicity ||= 1 .. 1
+    LAMBDA_NIL = lambda { | *args | nil } unless defined? LAMBDA_NIL
+
+    def _generate_property cls, name, type, multiplicity = nil, opts = nil
+      $stderr.puts "#### _generate_property #{cls.inspect} #{name.inspect} #{type.inspect} #{multiplicity.inspect} #{opts.inspect}"
+      multiplicity ||= 1
+      m = multiplicity
       multiplicity = _coerce_multiplicity multiplicity
       opts ||= EMPTY_HASH
 
       if type.hasStereotype?(:primitive)
-        typecheck = lambda { | msg | 
+        coerce = lambda { | msg | 
           <<"RUBY"
-__val = #{type}.coerce(__val)
+__val = __val.nil? ? __val : ::#{type}.coerce(__val)
 RUBY
         }
+        typecheck = LAMBDA_NIL
       else
+        coerce = LAMBDA_NIL
         typecheck = lambda { | msg | 
           <<"RUBY"
-raise ArgumentError, "#{msg}: expected #{type}" unless #{type} === __val
+raise ArgumentError, "#{msg}: expected #{type}" unless __val.nil? || ::#{type} === __val
 RUBY
         }
       end
 
-      case multiplicity.end
+      typecheck_min = if multiplicity.first == 1
+        lambda { | msg |
+          <<"RUBY"
+raise ArgumentError, "#{msg}: #{type} [#{multiplicity}]" if __val.nil?
+RUBY
+        }
+      else
+        LAMBDA_NIL
+      end
+
+      multiplicity_min = if multiplicity.first > 0
+        lambda { | msg, size |
+          <<"RUBY"
+raise ArgumentError, "#{msg}: #{type} [#{multiplicity}]" unless #{size} >= #{multiplicity.first}
+RUBY
+          }
+      else
+        LAMBDA_NIL
+      end
+
+      multiplicity_max = if multiplicity.last != N
+        lambda { | msg, size |
+          <<"RUBY"
+raise ArgumentError, "#{msg}: #{type} [#{multiplicity}]" unless #{size} <= #{multiplicity.last}
+RUBY
+          }
+      else
+        LAMBDA_NIL
+      end
+
+      case multiplicity.last
       when 1
         _class_eval cls, <<"RUBY", __FILE__, __LINE__
-  # Property #{name} : #{type} #{multiplicity}
+  # Property #{name} : #{type} #{m}
   def #{name}
     @#{name}
   end
+  def count_#{name}
+    @#{name} ? 1 : 0
+  end
   def #{name}= __val
+    # coerce
+    #{coerce.call("#{name}=")} 
+    # typecheck_min
+    #{typecheck_min.call("#{name}=")}
+    # typecheck
     #{typecheck.call("#{name}=")}
     clear_#{name}!
     @#{name} = __val
@@ -67,25 +111,45 @@ RUBY
   end
   def add_#{name}! __val
     return self if __val.nil?
+    # coerce
+    #{coerce.call("add_#{name}!")} 
+    # typecheck
     #{typecheck.call("add_#{name}!")}
-    raise ArgumentError, "add_#{name}!: already set" unless @#{name}.nil?
-    @#{name} = __val
+    if @#{name} != __val
+      # multiplicity_max
+      #{multiplicity_max.call("add_#{name}!", "count_#{name} + 1")}
+      @#{name} = __val
+    end
     self
   end
   def remove_#{name}! __val
     return self if __val.nil?
+    # coerce
+    #{coerce.call("remove_#{name}!")}
+    # typecheck
     #{typecheck.call("remove_#{name}!")}
-    @#{name} = nil if @#{name} == __val
+    if @#{name} == __val
+      # multiplicity_min
+      #{multiplicity_min.call("#{name}=", "count_#{name} - 1")}
+      @#{name} = nil
+    end
     self
   end
 RUBY
       else
         _class_eval cls, <<"RUBY", __FILE__, __LINE__
-  # Property #{name} : #{type} #{multiplicity}
+  # Property #{name} : #{type} #{m}
   def #{name}
     @#{name} ||= [ ]
   end
+  def count_#{name}
+    #{name}.size
+  end
   def #{name}= __vals
+    # multiplicity_min
+    #{multiplicity_min.call("#{name}=", "__vals.size")}
+    # multiplicity_max
+    #{multiplicity_max.call("#{name}=", "__vals.size")}
     clear_#{name}!
     __vals.each { | __val | add_#{name}! __val }
   end
@@ -95,13 +159,23 @@ RUBY
   end
   def add_#{name}! __val
     return self if __val.nil?
+    # coerce
+    #{coerce.call("add_#{name}!")} 
+    # typecheck
     #{typecheck.call("add_#{name}!")}
+    # multiplicity_max
+    #{multiplicity_max.call("add_#{name}!", "count_#{name} + 1")}
     #{name}.push(__val)
     self
   end
   def remove_#{name} __val
     return self if __val.nil?
+    # coerce
+    #{coerce.call("remove_#{name}!")}
+    # typecheck
     #{typecheck.call("remove_#{name}!")}
+    # multiplicity_min
+    #{multiplicity_min.call("#{name}=", "count_#{name} - 1")}
     #{name}.delete(__val)
     self
   end
