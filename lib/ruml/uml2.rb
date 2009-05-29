@@ -91,14 +91,14 @@ module RUML
         end # PrimitiveTypes
 
 =begin
-    module Abstractions
+    _package :Abstractions
 
-      module Elements
+      _package :Elements
         module Element
         end
       end # Elements
 
-      module Ownerships
+      _package :Ownerships
         module Element
           include Elements::Element
         end 
@@ -125,7 +125,7 @@ module RUML
       end # Ownerships
 
 
-      module Relationships
+      _package :Relationships
         module Relationship
           include Ownerships::Element
         end
@@ -149,7 +149,7 @@ module RUML
       end # Relationships
 
 
-      module Namespaces
+      _package :Namespaces
         module NamedElement
           include Ownerships::Element
           
@@ -184,7 +184,7 @@ module RUML
       end # Namespaces
 
       
-      module Expressions
+      _package :Expressions
         module ValueSpecification
           include Ownerships::Element
         end
@@ -208,7 +208,7 @@ module RUML
       end # Expressions
 
 
-      module Classifiers
+      _package :Classifiers
         module Classifier
           include Namespaces::Namespace
         end # Classifier
@@ -223,7 +223,7 @@ module RUML
       end # Classifiers
 
 
-      module TypedElements
+      _package :TypedElements
         module Type
           include Namespaces::NamedElement
         end # Type
@@ -238,7 +238,7 @@ module RUML
       end # TypedElements
 
 
-      module StructuralFeatures
+      _package :StructuralFeatures
         module StructuralFeature
           include TypedElements::TypedElement
           include Classifiers::Feature
@@ -247,7 +247,7 @@ module RUML
 
 
       # imports PrimitiveTypes
-      module BehaviorialFeatures
+      _package :BehaviorialFeatures
         module BehavioralFeature
           include Classifiers::Feature
           include Namespaces::Namespace
@@ -263,7 +263,7 @@ module RUML
         :parameter, Parameter,         '*',  { :ordered => true, :subsets => :member, :union => true }
       end # BehaviorialFeatures
 
-      module Changeabilities
+      _package :Changeabilities
         module StructuralFeature
           include BehaviorialFeatures::BehavioralFeature
         
@@ -271,7 +271,7 @@ module RUML
         end
       end # Changeabilities
 
-      module Multiplicities
+      _package :Multiplicities
         import PrimitiveTypes
 
         module MultiplicityElement
@@ -302,11 +302,11 @@ module RUML
       end # Multiplicities
 
 
-      module MultiplicityExpressions
+      _package :MultiplicityExpressions
       end # MultiplicityExpressions
 
 
-      module Comments
+      _package :Comments
         module Comment
           include Ownerships::Element
 
@@ -322,14 +322,14 @@ module RUML
         :ownedComment,  Comment,             :*,   { :subsets => :ownedElement }
       end # Comments
 
-      module Constraints
+      _package :Constraints
       end # Constraints
 
 
     end # ???
 
 
-    module Basic
+    _package :Basic
       import \
       PrimitiveTypes, 
       Abstractions::Namespaces, 
@@ -445,7 +445,7 @@ module RUML
     end # Basic
 
 
-    module Constructs
+    _package :Constructs
       import Abstractions
 
       module Type

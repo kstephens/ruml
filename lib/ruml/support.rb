@@ -31,7 +31,7 @@ module Support
     end
 
 
-    def _property cls, name, type, mutiplicity = nil, opts = nil
+    def _generate_property cls, name, type, mutiplicity = nil, opts = nil
       multiplicity ||= 1 .. 1
       multiplicity = _coerce_multiplicity multiplicity
       opts ||= EMPTY_HASH
@@ -110,11 +110,11 @@ RUBY
     end
 
 
-    def _association name1, type1, multiplicity1, opts1,
+    def _generate_association name1, type1, multiplicity1, opts1,
                      name2, type2, multiplicity2, opts2 = nil
 =begin
       $stderr.puts \
-"  # _association #{name1.inspect}, #{type1.inspect}, #{multiplicity1.inspect}, #{opts1.inspect},
+"  # association #{name1.inspect}, #{type1.inspect}, #{multiplicity1.inspect}, #{opts1.inspect},
                  #{name2.inspect}, #{type2.inspect}, #{multiplicity2.inspect}, #{opts2.inspect}"
 =end
 
@@ -266,14 +266,14 @@ RUBY
     end
 
     def property *args
-      _property self, *args
+      _generate_property self, *args
     end
 
     def association *args
       $stderr.puts "  # association #{args.inspect}"
       args[1] ||= self
       args[5] ||= self
-      _association *args
+      _generate_association *args
     end
 
     def import *packages

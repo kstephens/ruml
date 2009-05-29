@@ -6,7 +6,7 @@ begin
 
   module MM; end
 
-  b = RUML::Builder.new(:target => MM) do
+  b = RUML::Builder.new do
     _package :Pkg1 do
       _package :Types do
         _class :Type1 do
@@ -38,10 +38,14 @@ begin
     end
   end
 
-  pp b.created.map { | m | [ :module, m, :ruml, m.ruml, :ancestors, (x = m.ancestors; x.shift; x), :methods, m.methods.sort - Object.methods ] }
+  # pp b.created.map { | ast | [ :path, ast[:path], :ast, ast ] }
+
+  b.compile(:target => ::MM, :verbose => 9)
+
 rescue Exception => err
   $stderr.puts "ERROR: #{err.inspect}\n#{err.backtrace * "\n"}"
   raise err
 end
+
 
 
