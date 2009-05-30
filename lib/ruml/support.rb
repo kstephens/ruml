@@ -34,7 +34,7 @@ module Support
     LAMBDA_NIL = lambda { | *args | nil } unless defined? LAMBDA_NIL
 
     def _generate_property cls, name, type, multiplicity = nil, opts = nil
-      $stderr.puts "#### _generate_property #{cls.inspect} #{name.inspect} #{type.inspect} #{multiplicity.inspect} #{opts.inspect}"
+      $stderr.puts "#### _generate_property #{cls.inspect} #{name.inspect} #{type.inspect} #{multiplicity.inspect} #{opts.inspect}" if @verbose
       multiplicity ||= 1
       m = multiplicity
       multiplicity = _coerce_multiplicity multiplicity
@@ -246,6 +246,9 @@ RUBY
   def #{name}
     @#{name}
   end
+  def count_#{name}
+    @#{name} ? 1 : 0
+  end
   def multi_#{name}
     @#{name} ? [ @#{name} ] : [ ]
   end
@@ -283,6 +286,9 @@ RUBY
   # AssociationEnd #{name} : #{type} #{multiplicity}
   def #{name}
     @#{name} ||= [ ]
+  end
+  def count_#{name}
+    #{name}.size
   end
   alias :multi_#{name} :#{name}
   def #{name}= __vals
