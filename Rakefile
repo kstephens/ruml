@@ -23,6 +23,14 @@ Rake::TestTask.new(:test) do |test|
   test.verbose = true
 end
 
+require 'spec/rake/spectask'
+desc "Run all spec/ tests."
+Spec::Rake::SpecTask.new(:test_spec) do |t|
+  t.spec_files = FileList['spec/**/*_spec.rb']
+end
+
+task :test => [ :test_spec ] 
+
 begin
   require 'rcov/rcovtask'
   Rcov::RcovTask.new do |test|

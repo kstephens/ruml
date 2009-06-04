@@ -4,8 +4,8 @@ require 'ruml/builder'
 module RUML
   module UML2
     RUML::Builder.new(:target => self) do
-      _package :Core do
-        _package :PrimitiveTypes do
+      package :Core do
+        package :PrimitiveTypes do
           _class :Boolean do
             stereotype :primitive
 
@@ -91,14 +91,14 @@ module RUML
         end # PrimitiveTypes
 
 =begin
-    _package :Abstractions
+    package :Abstractions
 
-      _package :Elements
+      package :Elements
         module Element
         end
       end # Elements
 
-      _package :Ownerships
+      package :Ownerships
         module Element
           include Elements::Element
         end 
@@ -125,7 +125,7 @@ module RUML
       end # Ownerships
 
 
-      _package :Relationships
+      package :Relationships
         module Relationship
           include Ownerships::Element
         end
@@ -149,7 +149,7 @@ module RUML
       end # Relationships
 
 
-      _package :Namespaces
+      package :Namespaces
         module NamedElement
           include Ownerships::Element
           
@@ -184,7 +184,7 @@ module RUML
       end # Namespaces
 
       
-      _package :Expressions
+      package :Expressions
         module ValueSpecification
           include Ownerships::Element
         end
@@ -208,7 +208,7 @@ module RUML
       end # Expressions
 
 
-      _package :Classifiers
+      package :Classifiers
         module Classifier
           include Namespaces::Namespace
         end # Classifier
@@ -223,7 +223,7 @@ module RUML
       end # Classifiers
 
 
-      _package :TypedElements
+      package :TypedElements
         module Type
           include Namespaces::NamedElement
         end # Type
@@ -238,7 +238,7 @@ module RUML
       end # TypedElements
 
 
-      _package :StructuralFeatures
+      package :StructuralFeatures
         module StructuralFeature
           include TypedElements::TypedElement
           include Classifiers::Feature
@@ -247,7 +247,7 @@ module RUML
 
 
       # imports PrimitiveTypes
-      _package :BehaviorialFeatures
+      package :BehaviorialFeatures
         module BehavioralFeature
           include Classifiers::Feature
           include Namespaces::Namespace
@@ -263,7 +263,7 @@ module RUML
         :parameter, Parameter,         '*',  { :ordered => true, :subsets => :member, :union => true }
       end # BehaviorialFeatures
 
-      _package :Changeabilities
+      package :Changeabilities
         module StructuralFeature
           include BehaviorialFeatures::BehavioralFeature
         
@@ -271,7 +271,7 @@ module RUML
         end
       end # Changeabilities
 
-      _package :Multiplicities
+      package :Multiplicities
         import PrimitiveTypes
 
         module MultiplicityElement
@@ -302,11 +302,11 @@ module RUML
       end # Multiplicities
 
 
-      _package :MultiplicityExpressions
+      package :MultiplicityExpressions
       end # MultiplicityExpressions
 
 
-      _package :Comments
+      package :Comments
         module Comment
           include Ownerships::Element
 
@@ -322,14 +322,14 @@ module RUML
         :ownedComment,  Comment,             :*,   { :subsets => :ownedElement }
       end # Comments
 
-      _package :Constraints
+      package :Constraints
       end # Constraints
 
 
     end # ???
 
 
-    _package :Basic
+    package :Basic
       import \
       PrimitiveTypes, 
       Abstractions::Namespaces, 
@@ -445,7 +445,7 @@ module RUML
     end # Basic
 
 
-    _package :Constructs
+    package :Constructs
       import Abstractions
 
       module Type
@@ -496,7 +496,7 @@ module RUML
   end # Profiles
 =end
 
-    end # Builder.new
+    end.compile(:language => :ruby, :target => RUML::UML2) # Builder.new
 
   end # UML2
 end # RUML
