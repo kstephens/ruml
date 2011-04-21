@@ -108,6 +108,7 @@ RUBY
   end
   def clear_#{name}!
     @#{name} = nil
+    self
   end
   def add_#{name}! __val
     return self if __val.nil?
@@ -407,7 +408,7 @@ RUBY
     def _initialize opts = nil, &blk
       opts ||= EMPTY_HASH
       opts.each do | k, v |
-        s = "#{k}="
+        s = :"#{k}="
         if respond_to? s
           send(s, v)
         else
@@ -431,3 +432,34 @@ end # module
 Module.class_eval do
   include RUML::Support::CodeGeneration
 end
+
+class Hash
+  def project *keys
+    result = [ nil ] * keys.size
+    keys.each_with_index { | k, i | result[i] = self[k] }
+    result
+  end
+end
+
+
+# http://whytheluckystiff.net/articles/seeingMetaclassesClearly.html
+class Object
+  # The hidden singleton lurks behind everyone
+  def metaclass
+    class << self; self; end
+  end
+  def meta_eval &blk
+    metaclass.instance_eval &blk
+  end
+  
+  # Adds methods to a metaclass
+  def meta_def name, &blk
+    meta_eval { define_method name, &blk }
+  end
+  
+  # Defines an instance method within a class
+  def class_def name, &blk
+    class_eval { define_method name, &blk }
+  end
+end
+
