@@ -4,10 +4,13 @@ $:.uniq!
 
 describe "UML2" do
   it "should handle UnlimtedNatural" do
-  require 'ruml/uml2'
+    require 'ruml/uml2'
 
-  puts RUML::UML2::Core::PrimitiveTypes::UnlimitedNatural::INFINITY.inspect
-  puts RUML::UML2::Core::PrimitiveTypes::UnlimitedNatural.coerce(:*)
+    un = RUML::UML2::Core::PrimitiveTypes::UnlimitedNatural
+
+    un.class.inspect.should == 'Class'
+    un.coerce(:*).inspect.should == '' # FIXME
+    un.INFINITY.inspect.should == '' # FIXME
   end # it
 end # describe
 

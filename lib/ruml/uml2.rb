@@ -4,8 +4,8 @@ require 'ruml/builder'
 module RUML
   module UML2
     RUML::Builder.new(:target => self) do
-      _package :Core do
-        _package :PrimitiveTypes do
+      package :Core do
+        package :PrimitiveTypes do
           _class :Boolean do
             stereotype :primitive
 
@@ -91,23 +91,25 @@ module RUML
         end # PrimitiveTypes
 
 =begin
-    _package :Abstractions
+    package :Abstractions
 
-      _package :Elements
-        module Element
+      package :Elements do
+        _class :Element do
+          isAbstract true # ???
         end
       end # Elements
 
-      _package :Ownerships
-        module Element
-          include Elements::Element
+      package :Ownerships do
+        _class :Element do
+          isAbstract true # ???
+          generalization 'Elements::Element'
         end 
 
         association \
         :owner,        Element, 0..1, { :aggregation => true, :union => true },
         :ownedElement, Element, :*,   { :union => true }
 
-        def allOwnedElements
+        method :allOwnedElements do 
           acc = [ ]
           stk = [ self ]
           while obj = stk.pop
@@ -119,58 +121,62 @@ module RUML
           acc
         end
 
-        def mustBeOwned
+        method :mustBeOwned do
           true
         end
       end # Ownerships
 
 
-      _package :Relationships
-        module Relationship
-          include Ownerships::Element
+      package :Relationships do
+        _class :Relationship do
+          isAbstract true # ???
+          generalization 'Ownerships::Element'
         end
 
-        module DirectedRelationship
-          include Relationship
+        _class :DirectedRelationship do
+          isAbstract true # ???
+          generalization :Relationship
         end
 
         association \
-        nil,             Relationship,        :*,     { :navigable => false },
-        :relatedElement, Ownerships::Element, '1..N', { :readOnly => true, :union => true }
+        nil,             :Relationship,        :*,     { :navigable => false },
+        :relatedElement, 'Ownerships::Element', '1..N', { :readOnly => true, :union => true }
 
         association \
-        nil,     Relationship,        :*,     { :navigable => false },
-        :source, Ownerships::Element, '1..N', { :subsets => :relatedElement, :readOnly => true, :union => true }
+        nil,     :Relationship,        :*,      { :navigable => false },
+        :source, 'Ownerships::Element', '1..N', { :subsets => :relatedElement, :readOnly => true, :union => true }
 
         association \
-        nil,     Relationship,        :*,     { :navigable => false },
-        :target, Ownerships::Element, '1..N', { :subsets => :relatedElement, :readOnly => true, :union => true }
+        nil,     :Relationship,        :*,     { :navigable => false },
+        :target, 'Ownerships::Element', '1..N', { :subsets => :relatedElement, :readOnly => true, :union => true }
 
       end # Relationships
 
 
-      _package :Namespaces
-        module NamedElement
-          include Ownerships::Element
+      package :Namespaces do
+        _class :NamedElement do
+          isAbstract true # ???
+          generalization 'Ownerships::Element'
           
-          property :name, PrimitiveTypes::String
+          property :name, 'PrimitiveTypes::String'
           
-          def qualifiedName
+          method :qualifiedName do
             allNamespaces.join(separator)
           end
           
           SEPARATOR = '::'.freeze unless defined? SEPARATOR
-          def separator
+          method :separator do
             SEPARATOR
           end
 
-          def inspect
+          method :inspect do
             "\#<#{self.class} #{name.inspect} ...>"
           end
         end
         
-        module Namespace
-          include NamedElement
+        _class :Namespace
+          isAbstract true # ???
+          generalization :NamedElement
         end
 
         association \
@@ -184,117 +190,121 @@ module RUML
       end # Namespaces
 
       
-      _package :Expressions
-        module ValueSpecification
-          include Ownerships::Element
+      package :Expressions do
+        _class :ValueSpecification do
+          isAbstract true # ???
+          generalization 'Ownerships::Element'
         end
 
-        class OpaqueExpression
-          include RUML::Support::Instantiable
-          include ValueSpecification
-          property :body, String, :*, { :ordered => true }
-          property :language, String, :*, { :ordered => true }
+        _class :OpaqueExpression do
+          generalization :ValueSpecification
+          property :body, :String, :*, { :ordered => true }
+          property :language, :String, :*, { :ordered => true }
         end
 
-        class Expression
-          include RUML::Support::Instantiable
-          include ValueSpecification
-          property :symbol, String
+        _class :Expression do
+          generalization :ValueSpecification
+          property :symbol, :String
         end
 
         association \
-        :expression, Expression,         0..1, { :subsets => :owner, :aggregation => true },
-        :operand,    ValueSpecification, :*,   { :subsets => :ownedElement, :ordered => true }        
+        :expression, :Expression,         0..1, { :subsets => :owner, :aggregation => true },
+        :operand,    :ValueSpecification, :*,   { :subsets => :ownedElement, :ordered => true }        
       end # Expressions
 
 
-      _package :Classifiers
-        module Classifier
-          include Namespaces::Namespace
+      package :Classifiers do
+        _class :Classifier
+          isAbstract true # ???
+          generalization 'Namespaces::Namespace'
         end # Classifier
 
-        module Feature
-          include Namespaces::NamedElement
+        _class :Feature do
+          isAbstract true # ???
+          generalization 'Namespaces::NamedElement'
         end # Feature
 
         association \
-        :featuringClassifier, Classifier, :*, { },
-        :feature,             Feature,    :*, { :subsets => :member, :union => true }
+        :featuringClassifier, :Classifier, :*, { },
+        :feature,             :Feature,    :*, { :subsets => :member, :union => true }
       end # Classifiers
 
 
-      _package :TypedElements
-        module Type
-          include Namespaces::NamedElement
+      package :TypedElements do
+        _class :Type do
+          isAbstract true # ???
+          generalization 'Namespaces::NamedElement'
         end # Type
 
-        module TypedElement
-          include Namespaces::NamedElement
+        _class :TypedElement do
+          isAbstract true # ???
+          generalization 'Namespaces::NamedElement'
         end # TypedElement
 
         association \
-        nil, TypedElement, :*, { :navigable => false },
-        :type, Type, 0..1, { }
+        nil,   :TypedElement, :*, { :navigable => false },
+        :type, :Type, 0..1, { }
       end # TypedElements
 
 
-      _package :StructuralFeatures
-        module StructuralFeature
-          include TypedElements::TypedElement
-          include Classifiers::Feature
+      package :StructuralFeatures do
+        _class :StructuralFeature do
+          isAbstract true # ???
+          generalization 'TypedElements::TypedElement', 'Classifiers::Feature'
         end
       end # StructuralFeatures
 
 
       # imports PrimitiveTypes
-      _package :BehaviorialFeatures
-        module BehavioralFeature
-          include Classifiers::Feature
-          include Namespaces::Namespace
+      package :BehaviorialFeatures do
+        _class :BehavioralFeature do
+          isAbstract true # ???
+          generalization 'Classifiers::Feature', 'Namespaces::Namespace'
         end
         
-        module Parameter
-          include TypedElements::TypedElement
-          include Namespaces::NamedElement
+        _class :Parameter do
+          generalization 'TypedElements::TypedElement', 'Namespaces::NamedElement'
         end # Parameter
 
         association \
-        nil,        BehavioralFeature, 0..1, { },
-        :parameter, Parameter,         '*',  { :ordered => true, :subsets => :member, :union => true }
+        nil,        :BehavioralFeature, 0..1, { },
+        :parameter, :Parameter,         '*',  { :ordered => true, :subsets => :member, :union => true }
       end # BehaviorialFeatures
 
-      _package :Changeabilities
-        module StructuralFeature
-          include BehaviorialFeatures::BehavioralFeature
+      package :Changeabilities do
+        _class :StructuralFeature do
+          isAbstract true # ???
+          generalization 'BehaviorialFeatures::BehavioralFeature'
         
-          property :isReadOnly, PrimitiveTypes::Boolean, 1, { :default => 'false' }
+          property :isReadOnly, 'PrimitiveTypes::Boolean', 1, { :default => 'false' }
         end
       end # Changeabilities
 
-      _package :Multiplicities
-        import PrimitiveTypes
+      package :Multiplicities do
+        import :PrimitiveTypes 
 
-        module MultiplicityElement
-          include Elements::Element
+        _class :MultiplicityElement do
+          isAbstract true # ???
+          generalization 'Elements::Element'
 
-          property :isOrdered, Boolean, 1, { :default => 'false' }
-          property :isUnique, Boolean, 1, { :default => 'true' }
-          property :lower,  Integer, 0..1, { :default => '1' }
-          property :upper, UnlimitedNatural, 0..1, { :default => '1' }
+          property :isOrdered, :Boolean, 1, { :default => 'false' }
+          property :isUnique, :Boolean, 1, { :default => 'true' }
+          property :lower,  :Integer, 0..1, { :default => '1' }
+          property :upper, :UnlimitedNatural, 0..1, { :default => '1' }
 
-          def lowerBound
+          method :lowerBound do
             lower.nil? ? 1 : lower
           end
-          def upperBound
+          method :upperBound do
             upper.nil? ? 1 : upper
           end
-          def isMultivalued
+          method :isMultivalued do
             upperBound > 1
           end
-          def includesCardinality c
+          method :includesCardinality do | c |
             lowerBound <= c || upperBound >= c
           end
-          def includesMultiplicity m
+          method :includesMultiplicity do | m |
             lowerBound <= m.lowerBound && upperBound >= m.upperBound
           end
 
@@ -302,201 +312,175 @@ module RUML
       end # Multiplicities
 
 
-      _package :MultiplicityExpressions
+      package :MultiplicityExpressions do
       end # MultiplicityExpressions
 
 
-      _package :Comments
-        module Comment
-          include Ownerships::Element
+      package :Comments do
+        _class :Comment
+          generalization 'Ownerships::Element'
 
-          property :body, PrimitiveTypes::String
+          property :body, 'PrimitiveTypes::String'
         end # Comment
 
         association \
-        :comment,          Comment,             :*, { },
-        :annotatedElement, Ownerships::Element, :*, { }
+        :comment,          :Comment,             :*, { },
+        :annotatedElement, 'Ownerships::Element', :*, { }
 
         association \
-        :owningElement, Ownerships::Element, 0..1, { :subsets => :owner },
-        :ownedComment,  Comment,             :*,   { :subsets => :ownedElement }
+        :owningElement, 'Ownerships::Element', 0..1, { :subsets => :owner },
+        :ownedComment,  :Comment,             :*,   { :subsets => :ownedElement }
       end # Comments
 
-      _package :Constraints
+      package :Constraints do
       end # Constraints
 
 
     end # ???
 
 
-    _package :Basic
+    package :Basic do
       import \
-      PrimitiveTypes, 
-      Abstractions::Namespaces, 
-      Abstractions::TypedElements,
-      Abstractions::Multiplicities
+      :PrimitiveTypes, 
+      'Abstractions::Namespaces', 
+      'Abstractions::TypedElements',
+      'Abstractions::Multiplicities'
       
-      class Comment
-        include RUML::Support::Instantiable
-
-        include Abstractions::Comments::Comment
+      _class :Comment do
+        generalization 'Abstractions::Comments::Comment'
       end
 
-      class Class
-        include RUML::Support::Instantiable
+      _class :Class do
+        generalization :Type
 
-        include Type
-
-        property :isAbstract, Boolean
+        property :isAbstract, :Boolean
       end
 
-      class Property
-        include RUML::Support::Instantiable
+      _class :Property do
+        generalization :TypedElement, :MultiplicityElement
 
-        include TypedElement
-        include MultiplicityElement
-
-        property :isReadOnly, Boolean
-        property :default, String, 0..1
-        property :isComposite, Boolean
-        property :isDerived, Boolean
+        property :isReadOnly,  :Boolean
+        property :default,     :String, 0..1
+        property :isComposite, :Boolean
+        property :isDerived,   :Boolean
       end
 
 
-      class Operation
-        include RUML::Support::Instantiable
-
-        include TypedElement
-        include MultiplicityElement
+      _class :Operation do
+        generalization :TypedElement, :MultiplicityElement
       end
 
-      class Parameter
-        include RUML::Support::Instantiable
-
-        include TypedElement
-        include MultiplicityElement
+      _class :Parameter do
+        generalization :TypedElement, :MultiplicityElement
       end
 
-      module DataType
-        include Type
+      _class :DataType do
+        isAbstract true
+        generalization :Type
       end
       
-      class PrimitiveType
-        include RUML::Support::Instantiable
-
-        include DataType
+      _class :PrimitiveType do
+        generalization :DataType
       end
 
-      class Enumeration
-        include RUML::Support::Instantiable
-
-        include DataType
+      _class :Enumeration do
+        generalization :DataType
       end
 
-      class EnumerationLiteral
-        include RUML::Support::Instantiable
-
-        include NamedElement
+      _class :EnumerationLiteral do
+        generalization :NamedElement
       end
 
-      class Package
-        include RUML::Support::Instantiable
-
-        include NamedElement
+      _class :Package do
+        generalization :NamedElement
       end
 
 
       association \
-      nil,         Class, :*, { :navigable => false },
-      :superClass, Class, :*, { }
+      nil,         :Class, :*, { :navigable => false },
+      :superClass, :Class, :*, { }
 
       association \
-      :class,          Class,    0..1, { :composition => true },
-      :ownedAttribute, Property, :*,   { :ordered => true }
+      :class,          :Class,    0..1, { :composition => true },
+      :ownedAttribute, :Property, :*,   { :ordered => true }
 
       association \
-      :opposite, Property, 0..1, { },
-      nil,       Property, 0..1, { :navigable => false }
+      :opposite, :Property, 0..1, { },
+      nil,       :Property, 0..1, { :navigable => false }
 
       association \
-      :class,          Class,     0..1, { :composition => true },
-      :ownedOperation, Operation, :*,   { :ordered => true }
+      :class,          :Class,     0..1, { :composition => true },
+      :ownedOperation, :Operation, :*,   { :ordered => true }
 
       association \
-      :operation,      Operation, 0..1, { :composition => true },
-      :ownedParameter, Parameter, :*,   { :ordered => true }
+      :operation,      :Operation, 0..1, { :composition => true },
+      :ownedParameter, :Parameter, :*,   { :ordered => true }
 
       association \
-      nil,              Operation, 0..1, { :navigable => false },
-      :raisedException, Type,      :*,   { }
+      nil,              :Operation, 0..1, { :navigable => false },
+      :raisedException, :Type,      :*,   { }
 
       association \
-      :enumeration,    Enumeration,        0..1, { :composition => true },
-      :ownedLiteral,   EnumerationLiteral, :*,   { :ordered => true }
+      :enumeration,    :Enumeration,        0..1, { :composition => true },
+      :ownedLiteral,   :EnumerationLiteral, :*,   { :ordered => true }
 
       association \
-      :package, Package, 0..1, { :compostion => true },
-      :ownedType, Type,  :*,   { }
+      :package, :Package, 0..1, { :compostion => true },
+      :ownedType, :Type,  :*,   { }
 
       association \
-      :nestingPackage, Package, 0..1, { :compostion => true },
-      :nestedPackage, Package,  :*,   { }
+      :nestingPackage, :Package, 0..1, { :compostion => true },
+      :nestedPackage,  :Package,  :*,   { }
 
     end # Basic
 
 
-    _package :Constructs
-      import Abstractions
+    package :Constructs do
+      import :Abstractions
 
-      module Type
-        include TypedElements::Type
+      _class :Type do
+        isAbstract true # ???
+        generalization 'TypedElements::Type'
       end
 
-      module PackageableElement
-        include Namespaces::NamedElement
+      _class :PackageableElement do
+        isAbstract true # ???
+        generalization 'Namespaces::NamedElement'
       end
 
-      class Package
-        include RUML::Support::Instantiable
-        
-        include Namespaces::Namespace
-        include PackageableElement
+      _class :Package do
+        generalization 'Namespaces::Namespace', 'PackageableElement'
       end
 
       association \
-      :owningPackage,    Package,            0..1, { :subsets => :namespace, :aggregation => true },
-      :packagedElement,  PackageableElement, :*,   { :subsets => :ownedMember }
+      :owningPackage,    :Package,            0..1, { :subsets => :namespace, :aggregation => true },
+      :packagedElement,  :PackageableElement, :*,   { :subsets => :ownedMember }
 
       association \
-      :package,    Package, 0..1, { :subsets => :namespace, :aggregation => true },
-      :ownedType,  Type,    :*,   { :subsets => :packagedElement }
+      :package,    :Package, 0..1, { :subsets => :namespace, :aggregation => true },
+      :ownedType,  :Type,    :*,   { :subsets => :packagedElement }
 
       association \
-      :nestingPackage,   Package, 0..1, { :subsets => :namespace, :aggregation => true },
-      :nestedPackage,    Package, :*,   { :subsets => :packagedElement }
+      :nestingPackage,   :Package, 0..1, { :subsets => :namespace, :aggregation => true },
+      :nestedPackage,    :Package, :*,   { :subsets => :packagedElement }
 
-      class Association
-        include RUML::Support::Instantiable
-        
-        include Namespaces::NamedElement
+      _class :Association do
+        generalization 'Namespaces::NamedElement'
       end
       
-      class AssociationEnd
-        include RUML::Support::Instantiable
-        
-        include Namespaces::NamedElement
+      _class AssociationEnd do
+        generalization 'Namespaces::NamedElement'
       end
     end # Constructs
 =end
 
       end # Core
 
-=begin
-  module Profiles
-  end # Profiles
-=end
 
-    end # Builder.new
+      package :Profiles do
+      end # Profiles
+
+    end.compile(:language => :ruby, :target => RUML::UML2) # Builder.new
 
   end # UML2
 end # RUML

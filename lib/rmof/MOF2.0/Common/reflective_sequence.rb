@@ -1,7 +1,7 @@
 module Rmof
   module Mof2_0
     # Package Identifiers
-    class ReflectiveCollection < ReflectiveCollection
+    class ReflectiveSequence < ReflectiveCollection
       def add index, object # (Integer, Object) 
         @_.splice(index, 1, object)
         nil
@@ -17,9 +17,9 @@ module Rmof
           false
         end
       end
-      def set index, Object # (Integer, Object) : Object
+      def set index, object # (Integer, Object) : Object
         old = @_[index]
-        @_[index] = 
+        @_[index] = object
         old
       end
     end

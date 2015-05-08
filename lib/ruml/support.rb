@@ -2,7 +2,6 @@
 module RUML
 
 module Support
-  EMPTY_HASH = { }.freeze unless defined? EMPTY_HASH
   N = 1000000000000000 unless defined? N
   STAR = (0 .. N) unless defined? STAR
 
@@ -38,7 +37,7 @@ module Support
       multiplicity ||= 1
       m = multiplicity
       multiplicity = _coerce_multiplicity multiplicity
-      opts ||= EMPTY_HASH
+      opts ||= EMPTY_Hash
 
       if type.hasStereotype?(:primitive)
         coerce = lambda { | msg | 
@@ -202,7 +201,7 @@ RUBY
         end
       multiplicity1 ||= (1 .. 1)
       multiplicity1 = _coerce_multiplicity multiplicity1
-      opts1 ||= EMPTY_HASH
+      opts1 ||= EMPTY_Hash
       name1 = name1.to_s
       name1 = "_#{name1}" if name1 == 'class'
       
@@ -215,7 +214,7 @@ RUBY
         end
       multiplicity2 ||= (1 .. 1)
       multiplicity2 = _coerce_multiplicity multiplicity2
-      opts2 ||= EMPTY_HASH
+      opts2 ||= EMPTY_Hash
       name2 = name2.to_s
       name2 = "_#{name2}" if name2 == 'class'
      
@@ -406,7 +405,7 @@ RUBY
 
 
     def _initialize opts = nil, &blk
-      opts ||= EMPTY_HASH
+      opts ||= EMPTY_Hash
       opts.each do | k, v |
         s = :"#{k}="
         if respond_to? s

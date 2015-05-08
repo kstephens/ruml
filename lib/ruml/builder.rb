@@ -37,7 +37,7 @@ module RUML
         class_eval(expr = <<"RUBY", __FILE__, __LINE__)
 def #{name} *args, &blk
   _log { "#{name} \#{args.inspect} \#{blk && '&blk'}" }
-  obj = {:meta => :#{name}, :args => args, :blk => blk, :namespace => @namespace, }
+  obj = { :meta => :#{name}, :args => args, :blk => blk, :namespace => @namespace, }
   (@namespace[:#{name}] ||= [ ]).push(obj).uniq!
   @created << obj
   self
@@ -109,7 +109,7 @@ RUBY
       end
     end
 
-  end # Compiler
+  end # Builder
 end # RUML
 
 
