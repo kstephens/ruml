@@ -81,7 +81,7 @@ module RUML
     
     def compile x
       handler = nil
-      [ "compile_#{x[:meta]}_#{pass}", "compile_#{x[:meta]}" ].each do | sel |
+      [ :"compile_#{x[:meta]}_#{pass}", :"compile_#{x[:meta]}" ].each do | sel |
         if respond_to?(sel)
           handler = sel
           _log { "#{sel} #{x[:meta].inspect} #{x[:name].inspect} #{x[:args].inspect}" }
