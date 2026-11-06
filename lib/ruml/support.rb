@@ -10,7 +10,7 @@ module Support
       $stderr.puts "\nclass #{cls}\n#{str}\nend\n\n" if @verbose
       cls.class_eval str, file, line
     end
-    
+
     def _coerce_multiplicity m
       result =
       case m
@@ -40,7 +40,7 @@ module Support
       opts ||= EMPTY_Hash
 
       if type.hasStereotype?(:primitive)
-        coerce = lambda { | msg | 
+        coerce = lambda { | msg |
           <<"RUBY"
 __val = __val.nil? ? __val : ::#{type}.coerce(__val)
 RUBY
@@ -48,7 +48,7 @@ RUBY
         typecheck = LAMBDA_NIL
       else
         coerce = LAMBDA_NIL
-        typecheck = lambda { | msg | 
+        typecheck = lambda { | msg |
           <<"RUBY"
 raise ArgumentError, "#{msg}: expected #{type}" unless __val.nil? || ::#{type} === __val
 RUBY
@@ -97,7 +97,7 @@ RUBY
   end
   def #{name}= __val
     # coerce
-    #{coerce.call("#{name}=")} 
+    #{coerce.call("#{name}=")}
     # typecheck_min
     #{typecheck_min.call("#{name}=")}
     # typecheck
@@ -112,7 +112,7 @@ RUBY
   def add_#{name}! __val
     return self if __val.nil?
     # coerce
-    #{coerce.call("add_#{name}!")} 
+    #{coerce.call("add_#{name}!")}
     # typecheck
     #{typecheck.call("add_#{name}!")}
     if @#{name} != __val
@@ -160,7 +160,7 @@ RUBY
   def add_#{name}! __val
     return self if __val.nil?
     # coerce
-    #{coerce.call("add_#{name}!")} 
+    #{coerce.call("add_#{name}!")}
     # typecheck
     #{typecheck.call("add_#{name}!")}
     # multiplicity_max
@@ -193,7 +193,7 @@ RUBY
 =end
 
       type1 ||= self
-      name1 ||= 
+      name1 ||=
         begin
           x = type1.to_s
           x.sub!(/.*::/, '')
@@ -204,9 +204,9 @@ RUBY
       opts1 ||= EMPTY_Hash
       name1 = name1.to_s
       name1 = "_#{name1}" if name1 == 'class'
-      
+
       type2 or raise ArgumentError
-      name2 ||= 
+      name2 ||=
         begin
           x = type2.to_s
           x.sub!(/.*::/, '')
@@ -217,7 +217,7 @@ RUBY
       opts2 ||= EMPTY_Hash
       name2 = name2.to_s
       name2 = "_#{name2}" if name2 == 'class'
-     
+
 =begin
       $stderr.puts \
 "  # _association #{name1.inspect}, #{type1.inspect}, #{multiplicity1.inspect}, #{opts1.inspect},
@@ -226,7 +226,7 @@ RUBY
 
       end1 = { :name => name1.to_sym, :type => type1, :multiplicity => multiplicity1 }.update(opts1)
       end2 = { :name => name2.to_sym, :type => type2, :multiplicity => multiplicity2 }.update(opts2)
-      
+
       [ [ end1, end2 ], [ end2, end1 ] ].each do | (e, o) |
         ename = e[:name]
         etype = e[:type]
@@ -234,7 +234,7 @@ RUBY
         name = o[:name]
         type = o[:type]
         multiplicity = o[:multiplicity]
-        
+
         subsets = o[:subsets]
         subsets = [ subsets ] unless Array === subsets
         subsets = subsets.compact
@@ -274,7 +274,7 @@ RUBY
     return self if __val.nil?
     if @#{name} == __val
       raise ArgumentError, "remove_#{name}!: expected #{type}" unless #{type} === __val
-      @#{name} = nil 
+      @#{name} = nil
       #{subsets.map{|s| "remove_#{s}!(__val)"} * '; '} # subsets #{subsets * ', '}
       __val.remove_#{ename}!(self)
     end
@@ -394,9 +394,9 @@ RUBY
       base.extend(ClassMethods)
       name = base.to_s
       short_name = name.sub(/\A.*::/, '')
-      INSTANTIABLE_CLASSES[name.freeze] = 
-      INSTANTIABLE_CLASSES[short_name.freeze] = 
-      INSTANTIABLE_CLASSES[short_name.to_sym] = 
+      INSTANTIABLE_CLASSES[name.freeze] =
+      INSTANTIABLE_CLASSES[short_name.freeze] =
+      INSTANTIABLE_CLASSES[short_name.to_sym] =
         base
     end
 
@@ -421,7 +421,7 @@ RUBY
     end
     alias :initialize :_initialize
 
-  end 
+  end
 
 end # module
 
@@ -441,7 +441,7 @@ class Hash
 end
 
 
-# http://whytheluckystiff.net/articles/seeingMetaclassesClearly.html
+# http://whytheluckystiff.net/articles/traversingMetaclassesClearly.html
 class Object
   # The hidden singleton lurks behind everyone
   def metaclass
@@ -450,12 +450,12 @@ class Object
   def meta_eval &blk
     metaclass.instance_eval &blk
   end
-  
+
   # Adds methods to a metaclass
   def meta_def name, &blk
     meta_eval { define_method name, &blk }
   end
-  
+
   # Defines an instance method within a class
   def class_def name, &blk
     class_eval { define_method name, &blk }

@@ -5,13 +5,13 @@ module RUML
   class Compiler
     include RUML::Support::CodeGeneration
     EMPTY_ARRAY = [ ].freeze unless defined? EMPTY_ARRAY
-    
+
     # Inputs:
     attr_reader :target, :pass
-    
+
     # Outputs:
     attr_reader :created, :path_to_module
-    
+
     def initialize opts = nil, &blk
       opts ||= { } # EMPTY_HASH
       @opts = opts
@@ -26,9 +26,9 @@ module RUML
       @obj_to_target = { }
       raise ArgumentError, ":target not a Module" unless Module === @target
     end
-      
+
     def _log msg = nil
-      if @verbose 
+      if @verbose
         msg ||= yield if block_given?
         $stderr.puts "#{self.class} #{pass}#{'  ' * @current_stack.size} #{msg}"
       end
@@ -59,7 +59,7 @@ module RUML
         raise ArgumentError, "type #{type.inspect}"
       end
     end
-    
+
     def _decomp_path path
       result = [ ]
       path.to_s.split('::').inject(Kernel) do | o, n |
@@ -77,8 +77,8 @@ module RUML
       end
       result
     end
-    
-    
+
+
     def compile x
       handler = nil
       [ :"compile_#{x[:meta]}_#{pass}", :"compile_#{x[:meta]}" ].each do | sel |
@@ -93,45 +93,45 @@ module RUML
         _log { "WARNING no handler for #{x[:meta]}" }
       end
     end
-    
-    
+
+
     def compile_root rep
       rep[:ownedElement].each { | x | compile(x) }
       @pass += 1
       rep[:ownedElement].each { | x | compile(x) }
     end
-    
+
     def compile_class rep
       send("compile_namespace_#{pass}", rep)
     end
-    
+
     def compile_package rep
       send("compile_namespace_#{pass}", rep)
     end
-    
+
     def _generalization rep
       (rep[:generalization] || EMPTY_ARRAY).
         map{|x| x[:args]}.
         flatten.
         map{|x| _type(x)}
     end
-    
+
     def compile_namespace_1 rep
       raise "target is nil" if target.nil?
       type, name, args, blk = rep.project(:type, :name, :args, :blk)
-      
+
       path = _decomp_path target
       pre = '::'
       path_b = path.map { | x | y = pre; pre = nil; " #{x[0]} #{y}#{x[1]} " }.join('; ')
       path_e = path.map { | x | " end " }.join('; ')
-      
+
       g = _generalization rep
-      
+
       _log { "  g = #{g.inspect}" } unless g.empty?
-      
+
       def_args = nil
       inside = nil
-      
+
       case type
       when :class
         if rep[:isAbstract]
@@ -149,25 +149,25 @@ module RUML
         expr = "module "
       else
         raise ArgumentError, "invalid type #{type.inspect}"
-      end 
-      
+      end
+
       expr = "#{path_b}; #{expr} #{name} #{def_args}; #{inside} end;  #{path_e}; ::#{@target}::#{name};"
-      
+
       _log { "#{expr}" }
-      
+
       target = Kernel.eval(expr)
       @created << target
-      
-      _log { "#{target.inspect} { " }  
-      
+
+      _log { "#{target.inspect} { " }
+
       # If it's a non-abstract class, make it instantiable.
       if type == :class && ! rep[:isAbstract]
         _log { "  include RUML::Support::Instantiable" }
-        target.instance_eval do 
+        target.instance_eval do
           include RUML::Support::Instantiable
         end
       end
-      
+
       # Add generalizations.
       this = self
       g.each do | x |
@@ -180,19 +180,19 @@ module RUML
           include x
         end
       end
-      
+
       @path_to_module[rep[:path]] = target
       inside_namespace rep
-      
+
       _log { "}" }
-      
+
       target
     end
-    
+
     def compile_namespace_2 rep
       inside_namespace rep
     end
-    
+
     def inside_namespace rep
       begin
         @target_stack.push @target
@@ -205,7 +205,7 @@ module RUML
         @current = @current_stack.pop
       end
     end
-    
+
     def in_namespace_1 rep
       [ :stereotype, :import, :property, :method, :constant, :ownedElement ].each do | k |
         (rep[k] || EMPTY_ARRAY).each do | x |
@@ -213,7 +213,7 @@ module RUML
         end
       end
     end
-    
+
     def in_namespace_2 rep
       [ :ownedElement, :association ].each do | k |
         (rep[k] || EMPTY_ARRAY).each do | x |
@@ -221,7 +221,7 @@ module RUML
         end
       end
     end
-    
+
     def compile_constant rep
       (name, val), blk = rep.project(:args, :blk)
       name = name.to_s
@@ -230,14 +230,14 @@ module RUML
           val = target.instance_eval &blk
         end
         _log { "  constant #{rep[:name].inspect} = #{rep[:val].inspect}" }
-        
+
         target.const_set(name, val)
-        
+
         target.meta_def(name) { || val }
         target.class_def(name) { || val }
       end
     end
-    
+
     def compile_import rep
       args = rep.project(:args)
       args.flatten.each do | x |
@@ -249,32 +249,32 @@ module RUML
         end
       end
     end
-    
+
     def compile_stereotype rep
       args = rep[:args]
       @target.stereotype *args
     end
-    
+
     def compile_property rep
       args = rep[:args].dup
       args[1] = _type(args[1]) || (raise "Cannot find type for #{rep.inspect}")
       _generate_property target, *args
     end
-    
+
     def compile_association rep
       args = rep[:args].dup
       args[1] = _type(args[1]) || target
       args[5] = _type(args[5]) || target
       _generate_association *args
     end
-    
+
     def compile_method rep
       args, blk = rep.project(:args, :blk)
       args = args.dup
       name = args.shift
-      
+
       t = target
-      
+
       if args.include?(:class)
         # t = target.const_get("ClassBehavior") if Class == target
         t.meta_def name, &blk
@@ -282,11 +282,11 @@ module RUML
         # t = target.const_get("Behavior") if Class == target
         t.class_def name, &blk
       end
-      
+
       _log { "    => pim #{(t.public_instance_methods.sort - Object.methods).inspect}" }
       _log { "    => sm  #{(t.methods.sort - Object.methods).inspect}" }
     end
-    
+
   end # Compiler
 end # RUML
 
@@ -300,7 +300,7 @@ class Hash
 end
 
 
-# http://whytheluckystiff.net/articles/seeingMetaclassesClearly.html
+# http://whytheluckystiff.net/articles/traversingMetaclassesClearly.html
 class Object
   # The hidden singleton lurks behind everyone
   def metaclass
@@ -309,12 +309,12 @@ class Object
   def meta_eval &blk
     metaclass.instance_eval &blk
   end
-  
+
   # Adds methods to a metaclass
   def meta_def name, &blk
     meta_eval { define_method name, &blk }
   end
-  
+
   # Defines an instance method within a class
   def class_def name, &blk
     class_eval { define_method name, &blk }
