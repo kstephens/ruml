@@ -10,7 +10,7 @@ module Rmof
       end
 
       def container
-        @_container 
+        @_container
       end
 
       def equals(element)
@@ -27,7 +27,7 @@ module Rmof
       end
 
       def isSet(property)
-        @_slots[property] && @_slots[property] != property.default &&
+        @_slots[property] && @_slots[property] != property.default # && ???
       end
 
       def unset(property)
