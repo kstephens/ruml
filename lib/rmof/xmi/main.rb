@@ -1,14 +1,16 @@
+require 'pry'
+require 'pry-byebug'
+
 require 'rmof/xmi/parser'
 require 'rmof/xmi/resolver'
 require 'rmof/xmi/formatter'
 require 'rmof/xmi/compiler'
-require 'pry'
 
 # "vendor/www.omg.org/spec/MOF/20131001/MOF.xmi"
 # "vendor/www.omg.org/spec/UML/20161101/UML.xmi"
 def parse_xmi input_file
-  xmi = RMOF::XMI::Parser.new.call(input_file)
-  root = xmi.root
+  root = RMOF::XMI::Parser.new.call(input_file)
+  # binding.pry
   root = RMOF::XMI::Resolver.new.call(root)
   root
 end
@@ -27,11 +29,11 @@ end
 
 begin
   load(output_file)
-rescue
-  $stderr.puts $!.inspect
-  $!.backtrace.each do | t |
-    sstderr.puts t
+rescue => e
+  $stderr.puts e.inspect
+  e.backtrace.each do | t |
+    $stderr.puts t
   end
 end
 
-binding.pry
+# binding.pry

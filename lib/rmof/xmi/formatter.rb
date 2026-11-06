@@ -18,7 +18,7 @@ module RMOF
       def emit(obj)
         return unless emit_basic(obj)
         # binding.pry if @depth > 10
-        obj._xmi_associations.each do | name, objs |
+        obj._xmi.associations.each do | name, objs |
           objs.each do | obj |
             @depth += 1
             indent
@@ -40,8 +40,8 @@ module RMOF
           return false
         end
         @seen[obj.__id__] = obj
-        write "#{cls._xmi_type} \##{id} "
-        obj._xmi_properties.each do | name, value |
+        write "#{cls._xmi.type} \##{id} "
+        obj._xmi.properties.each do | name, value |
           write "#{name}=#{value.inspect} "
         end
         write "\n"

@@ -11,40 +11,58 @@ module RMOF
       def initialize
         @namespaces = {}
         @object_id = 0
+        @id_to_object = {}
       end
 
-      def make_instance(namespace, name, properties)
+      def make_instance(namespace, name, properties, id=nil)
+        if id and other = @id_to_object[id]
+          puts "found #{id} : #{other}"
+          return other
+        end
+
         cls = get_xmi_type(namespace, name)
         obj = cls.new
-        obj._xmi_type = "#{namespace}:#{name}"
+        obj._xmi.type = "#{namespace}:#{name}"
         properties.each do | name, value |
           obj.__send__(:"#{name}=", value)
         end
-        obj._xmi_object_id = (@object_id += 1)
+        obj._xmi.object_id = (@object_id += 1)
+        if id
+          if other = @id_to_object[id]
+            raise ArgumentError, "object with id #{id.inspect} already exists : #{other}"
+          end
+          @id_to_object[id] = obj
+          puts "created #{id} : #{other}"
+        end
         obj
       end
 
-      def get_xmi_namespace(name)
-        if result = @namespaces[name]
-          result
-        end
-        @namespaces[name] = Namespaces.const_get(:"N_#{name}", false)
+      def get_xmi_namespace(xmlns)
+        xmlns = xmlns.to_sym
+        @namespaces[xmlns] ||= Namespaces.const_get(:"N_#{xmlns}", false)
       end
 
-      def get_xmi_type(ns, name)
-        ns = ns.to_sym
+      def get_xmi_type(xmlns, name)
+        xmlns = xmlns.to_sym
         name_sym = name.to_sym
-        mod = get_xmi_namespace(ns)
+        mod = get_xmi_namespace(xmlns)
         return mod.const_get(name_sym, false) if mod.const_defined?(name_sym, false)
         cls = ::Class.new(Base)
         cls.extend(BaseAttributes)
-        mod.const_set(name_sym, cls)
+        cls.extend(Metaclass)
         cls._xmi_initialize_BaseAttributes
+        cls._xmi.xmlns = xmlns
+        cls._xmi.name = name_sym
+        mod.const_set(name_sym, cls)
         cls
       end
-
     end
 
+    module Metaclass
+    end
+
+    # These are directly related to XML namespace tags.
+    # See get_xmi_namespace()
     module Namespaces
       module N_xmi; end
       module N_uml; end
@@ -52,22 +70,34 @@ module RMOF
       module N_mofext; end
     end
 
+    # Generic attributes for all objects.
+    class Attributes
+      attr_reader :properties, :associations
+      attr_accessor :object_id, :id
+      attr_accessor :xmlns, :name
+      attr_accessor :type, :type_prefix, :type_name
+      attr_accessor :package, :namespace, :_class
+      attr_accessor :module, :module_name, :modules
+      attr_accessor :imports
+      attr_accessor :url, :line
+      @@object_id = 0
+
+      def initialize
+        @properties = {}
+        @associations = ::Hash.new{|h, k| h[k] = []}
+        @operations = {}
+        @modules = {}
+        @imports = []
+        @object_id = (@@object_id += 1)
+      end
+    end
+
+    # Mixin that provides basic Property and Association support.
     module BaseAttributes
-      attr_reader :_xmi_properties, :_xmi_associations
-      attr_accessor :_xmi_object_id, :_xmi_id
-      attr_accessor :_xmi_type, :_xmi_type_prefix, :_xmi_type_name
-      attr_accessor :_xmi_package, :_xmi_namespace
-      attr_accessor :_xmi_module, :_xmi_module_name, :_xmi_modules
-      attr_accessor :_xmi_imports
-      @@_xmi_object_id = 0
+      attr_reader :_xmi
 
       def _xmi_initialize_BaseAttributes
-        @_xmi_properties = {}
-        @_xmi_associations = ::Hash.new{|h, k| h[k] = []}
-        @_xmi_operations = {}
-        @_xmi_modules = {}
-        @_xmi_imports = []
-        # @_xmi_object_id = (@@_xmi_object_id += 1)
+        @_xmi = Attributes.new
       end
 
       def _xmi_class
@@ -80,21 +110,21 @@ module RMOF
         when blk
           raise ::StandardError, "#{sel}: block given"
         when args.empty?
-          if @_xmi_associations.key?(sel)
-            @_xmi_associations[sel]
+          if @_xmi.associations.key?(sel)
+            @_xmi.associations[sel]
           else
             @_xmi_properties[sel]
           end
         when (name = sel.to_s) && name[-1] == "=" && args.size == 1
           name = name[0..-2].to_sym
-          if @_xmi_associations.key?(name)
-            @_xmi_associations[name] = [ args[0] ]
+          if @_xmi.associations.key?(name)
+            @_xmi.associations[name] = [ args[0] ]
           else
-            @_xmi_properties[name] = args[0]
+            @_xmi.properties[name] = args[0]
           end
         else
           # $stderr.puts "sel=#{sel.inspect} args=#{args.inspect}"
-          @_xmi_operations[sel].call(*args)
+          @_xmi.operations[sel].call(*args)
         end
       end
     end
@@ -108,16 +138,16 @@ module RMOF
 
       def inspect
         cls = _xmi_class
-        id = "#{__id__}:#{@_xmi_object_id.inspect}"
+        id = "#{__id__}:#{@_xmi.object_id.inspect}"
         "#<#{cls&.name} #{id} #{@_xmi_properties.inspect}>"
       end
 
       def to_s
+        return inspect
         cls = _xmi_class
-        id = "#{__id__}:#{@_xmi_object_id.inspect}"
+        id = "#{__id__}:#{@_xmi.object_id.inspect}"
         "#<#{cls&.name} #{id} />"
       end
     end
   end
 end
-
