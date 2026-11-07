@@ -1,88 +1,133 @@
 require 'ruml'
 require 'ruml/support'
 require 'ruml/compiler'
+require 'ruml/navigable'
+require 'ruml/ast'
+require 'ruml/logging'
 
 module RUML
 
   # Understands a small DSL for UML modeled in subset of UML Substructure.
   class Builder
-    attr_reader :created
+    attr_reader :created, :root, :namespace
+
+    include AST::Repr, Logging
+    alias_method :_repr, :namespace
 
     def initialize opts = nil, &blk
       opts ||= { } # EMPTY_HASH
       @opts = opts
-      @verbose = @opts[:verbose]
+      @_log_verbose = true # @opts[:verbose]
       @created = [ ]
-      @root = @opts[:root] || { :meta => :root }
+      @root = @opts[:root] || AST::Node[meta: :root]
       @namespace = @root
       @namespace_stack = [ ]
-      instance_eval &blk if block_given?
+      @result = instance_eval(&blk) if block_given?
+    end
+
+    def inspect detail=false
+      return super() if detail
+      "#<#{self.class} ...>"
     end
 
     def _log msg = nil
-      if @verbose 
+      if @verbose
         msg ||= yield if block_given?
-        $stderr.puts "#{self.class}#{'  ' * @namespace_stack.size} #{msg}"
+        _log { "#{self.class}#{'  ' * @namespace_stack.size} #{msg}" }
       end
     end
 
-    def compile(opts = { })
+    def _compile(opts = { })
+      opts = @opts.merge(opts)
       c = Compiler.new(opts)
       c.compile(@root)
       c
     end
 
-    def self.collector *names
-      names.each do | name |
-        class_eval(expr = <<"RUBY", __FILE__, __LINE__)
-def #{name} *args, &blk
-  _log { "#{name} \#{args.inspect} \#{blk && '&blk'}" }
-  obj = { :meta => :#{name}, :args => args, :blk => blk, :namespace => @namespace, }
-  (@namespace[:#{name}] ||= [ ]).push(obj).uniq!
-  @created << obj
-  self
+    def self.collector *names, &blk
+      source_location = [__FILE__, __LINE__ - 1]
+      names.each do |meta|
+        raise "collector : #{meta} : unexpected block" if blk
+        expr = <<"RUBY"
+def #{meta} *args, &blk
+  _make_node(:#{meta}, *args, &blk)
 end
 RUBY
-        $stderr.puts expr
+        class_eval(expr, *source_location)
       end
     end
 
-    collector :import, :stereotype, :property, :association, :constant, :method, :generalization
+    def _make_node meta, *args, &blk
+      _log { "#{meta} \#{args.inspect} \#{blk && '&blk'}" }
+      name = args[0].to_s
+      path = @namespace_stack.map(&:name).compact.join('::')
+      obj = ::RUML::AST::Node[
+        meta: meta,
+        type: meta,
+        name: name,
+        args: args,
+        blk: blk,
+        namespace: @namespace,
+        namespace_path: path,
+        ownedElement: [],
+        # owner: nil,
+      ]
+      (@namespace[name] ||= [ ]).push(obj).uniq!
+      @created << obj
+      obj
+    end
+
+    def _desc node
+      path_str = node._namespace_str
+      "#{self.class}._namespace : #{node.inspect} @ #{path_str}"
+    end
+
+    collector :import, :stereotype, :property, :association, :constant, :parameter, :generalization
 
     def package name, *args, &blk
-      _namespace :package, name, *args, &blk
+      _namespace :package, name, args, &blk
     end
 
-    def _class name, *args, &blk
-      _namespace :class, name, *args, &blk
+    def class_ name, *args, &blk
+      _namespace :class, name, args, &blk
     end
 
-    def _namespace type, name, *args, &blk
-      raise "@namespace is nil" if @namespace.nil?
-      
-      namespace = { :meta => type, :type => type, :name => name, :args => args }
-      namespace[:path] = (@namespace_stack + [ @namespace, namespace ]).map{|x| x[:name]}.compact.join('::')
-
-      _log { "#{namespace.inspect} { " }
-  
-      @created << namespace
-
-      (@namespace[:ownedElement] ||= [ ]) << namespace
-      namespace[:namespace] = @namespace
-
-      if blk
-        begin
-          @namespace_stack.push @namespace
-          @namespace = namespace
-          instance_eval &blk
-        ensure
-          @namespace = @namespace_stack.pop
+    def method name, *args, &blk
+      _namespace(:method, name, args) do | node |
+        node.blk = blk
+        # binding.pry
+        node.parameter = blk.parameters.map do |(kind, name)|
+          parameter name
         end
+      end
+    end
+
+    def namespace_str path
+      path.map{|node| node.name}.compact.map(&:to_s).join("::")
+    end
+
+    def _namespace type, name, args, instance_blk=nil, &inner_blk
+      name = name.to_s.sub(/\A_/, '').to_sym
+      raise "@namespace is nil" if @namespace.nil?
+
+      node = _make_node(type, name, *args, &instance_blk)
+      msg = "#{self.class}._namespace : #{_desc(node)}"
+      puts(msg)
+      _log { msg }
+
+      @created << node
+      (@namespace.ownedElement ||= []) << node
+      @namespace_stack.push @namespace
+      begin
+        @namespace = node
+        yield node if inner_blk
+      ensure
+        @namespace = @namespace_stack.pop
       end
 
       _log { "}" }
 
-      namespace
+      node
     end
 
     def method_missing sel, *args, &blk
@@ -91,25 +136,19 @@ RUBY
       when /\A([a-z0-9_]+)\Z/i
         case args.size
         when 0
-          @namespace[sel.to_sym]
+          return @namespace[sel]
         when 1
-          @namespace[sel.to_sym] = args.first
-        else
-          super
+          return @namespace[sel] = args.first
         end
       when /\A([a-z0-9_]+)=\Z/i
         case args.size
         when 1
-          @namespace[$1.to_sym] = args.first
-        else
-          super
+          return @namespace[$1.to_sym] = args.first
         end
-      else
-        super
       end
+      super
     end
 
   end # Builder
 end # RUML
-
 

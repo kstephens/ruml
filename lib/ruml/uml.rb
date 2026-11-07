@@ -1,5 +1,8 @@
+# frozen_string_literal: true
+
 require 'ruml/support'
 
+raise "SDFSDF"
 module RUML
 
 module UML
@@ -45,40 +48,18 @@ module UML
         end
       end
 
-      class UnlimitedNatural < Integer
+      class UnlimitedNatural
         include RUML::Support::Instantiable
         stereotype :primitive
 
-        def initialize rep
-          @rep = rep
+        INFINITY = 10**20
+
+        def self.create x
+          coerce x
         end
-
-        INFINITY = new(:*) unless defined? INFINITY
-
-        def to_s
-          @rep.to_s
-        end
-        def inspect
-          @rep.inspect
-        end
-
-        def >= x
-          true
-        end
-
-        def <= x
-          x != INFINITY
-        end
-
-        def > x
-          x != INFINITY
-        end
-
-        def < x
-          x != INFINITY
-        end
-
-
+        def to_i; INFINITY; end
+        def to_s; "*"; end
+        def to_sym; :*; end
         def self.coerce x
           case x
           when :*, '*'
@@ -104,7 +85,7 @@ module UML
       module Ownerships
         module Element
           include Elements::Element
-        end 
+        end
 
         association \
         :owner,        Element, 0..1, { :aggregation => true, :union => true },
@@ -155,13 +136,13 @@ module UML
       module Namespaces
         module NamedElement
           include Ownerships::Element
-          
+
           property :name, PrimitiveTypes::String
-          
+
           def qualifiedName
             allNamespaces.join(separator)
           end
-          
+
           SEPARATOR = '::'.freeze unless defined? SEPARATOR
           def separator
             SEPARATOR
@@ -171,7 +152,7 @@ module UML
             "\#<#{self.class} #{name.inspect} ...>"
           end
         end
-        
+
         module Namespace
           include NamedElement
         end
@@ -179,14 +160,14 @@ module UML
         association \
         :namespace,   Namespace,     0..1, { :readOnly => true, :union => true, :subsets => :owner,  },
         :ownedMember, NamedElement,  :*, { :readOnly => true, :union => true, :subsets => [ :member, :ownedElement ], }
-        
+
         association \
         :owner,       Namespace,     :*, { :navigable => false },
         :member,      NamedElement,  :*, { :readOnly => true, :union => true, }
 
       end # Namespaces
 
-      
+
       module Expressions
         module ValueSpecification
           include Ownerships::Element
@@ -207,7 +188,7 @@ module UML
 
         association \
         :expression, Expression,         0..1, { :subsets => :owner, :aggregation => true },
-        :operand,    ValueSpecification, :*,   { :subsets => :ownedElement, :ordered => true }        
+        :operand,    ValueSpecification, :*,   { :subsets => :ownedElement, :ordered => true }
       end # Expressions
 
 
@@ -255,7 +236,7 @@ module UML
           include Classifiers::Feature
           include Namespaces::Namespace
         end
-        
+
         module Parameter
           include TypedElements::TypedElement
           include Namespaces::NamedElement
@@ -269,7 +250,7 @@ module UML
       module Changeabilities
         module StructuralFeature
           include BehaviorialFeatures::BehavioralFeature
-        
+
           property :isReadOnly, PrimitiveTypes::Boolean, 1, { :default => 'false' }
         end
       end # Changeabilities
@@ -334,11 +315,11 @@ module UML
 
     module Basic
       import \
-      PrimitiveTypes, 
-      Abstractions::Namespaces, 
+      PrimitiveTypes,
+      Abstractions::Namespaces,
       Abstractions::TypedElements,
       Abstractions::Multiplicities
-      
+
       class Comment
         include RUML::Support::Instantiable
 
@@ -383,7 +364,7 @@ module UML
       module DataType
         include Type
       end
-      
+
       class PrimitiveType
         include RUML::Support::Instantiable
 
@@ -461,7 +442,7 @@ module UML
 
       class Package
         include RUML::Support::Instantiable
-        
+
         include Namespaces::Namespace
         include PackageableElement
       end
@@ -480,17 +461,17 @@ module UML
 
       class Association
         include RUML::Support::Instantiable
-        
+
         include Namespaces::NamedElement
       end
-      
+
       class AssociationEnd
         include RUML::Support::Instantiable
-        
+
         include Namespaces::NamedElement
       end
     end # Constructs
-    
+
   end # Core
 
   module Profiles

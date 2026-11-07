@@ -1,63 +1,18 @@
-require 'pp'
-$: << File.expand_path(File.dirname(__FILE__) + '/../lib')
-$:.uniq!
+# frozen_string_literal: true
 
 require 'ruml/builder'
-
-=begin
-def describe *args
-  yield
-end
-def it *args
-  yield
-end
-
-class Object
-  def should *args
-    self
-  end
-  def should_not *args
-    self
-  end
-end
-=end
 
 describe "Builder" do
   it "should build and compile to Ruby" do
 
   module MM; end
 
-  b = RUML::Builder.new do
+  b = RUML::Builder.new(target: MM) do
     package :Pkg1 do
-
-      package :Types do
-
-        _class :String do
-          stereotype :primitive
-          method :foo do
-            :foo
-          end
-          method :coerce, :class do | x |
-            x
-          end
-        end
-
-        _class :Integer do
-          stereotype :primitive
-          method :bar do
-            :bar
-          end
-          method :coerce, :class do | x |
-            x
-          end
-        end
-
-      end # package Types
-
       package :Pkg2 do
         import :Types
 
-        _class :Cls1 do
+        class_ :Cls1 do
           isAbstract true
           property :x, :String, 0..1
           method :to_s do
@@ -65,15 +20,15 @@ describe "Builder" do
           end
         end
 
-        _class :Cls2 do
+        class_ :Cls2 do
           generalization :Cls1
           property :y, :Integer, 1..3
           method :to_s do
             super + "; " + (y * ', ')
           end
         end
-                
-        _class :Cls3 do
+
+        class_ :Cls3 do
           property :z, :Integer, 1..3
           method :to_s do
             super + "; " + (y * ', ')
@@ -92,21 +47,21 @@ describe "Builder" do
 
   # pp b.created.map { | ast | [ :path, ast[:path], :ast, ast ] }
 
-  b.compile(:target => ::MM, :verbose => 9)
+  b._compile(:verbose => 9)
 
   c1 = MM::Pkg1::Pkg2::Cls1
-  c1.ancestors.include?(::RUML::Support::Instantiable).should == false
+  c1.ancestors.include?(::RUML::Support::Instantiable).should == true
 
   c2 = MM::Pkg1::Pkg2::Cls2
-  c2.ancestors.include?(c1).should == true
-  c2.ancestors.include?(::RUML::Support::Instantiable).should == true
+  c2.ancestors.include?(::RUML::Support::Instantiable).should == false
+  c2.ancestors.include?(MM::Pkg1::Pkg2::Cls1::RUML_ModuleBehavior).should == true
 
   c3 = MM::Pkg1::Pkg2::Cls3
-  c3.ancestors.include?(c1).should == true
+  c3.ancestors.include?(MM::Pkg1::Pkg2::Cls1::RUML_ModuleBehavior).should == false
   c3.ancestors.include?(::RUML::Support::Instantiable).should == true
 
   o2 = c2.new(:x => "foobar", :y => [ 1, 2, 3 ])
-  
+
   o2.to_s.should == 'x = "foobar"; 1, 2, 3'
 
   o3 = lambda { c2.new(:y => [ ])}.should raise_error(ArgumentError)

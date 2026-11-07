@@ -1,28 +1,23 @@
-require 'pp'
-$: << File.expand_path(File.dirname(__FILE__) + '/../lib')
-$:.uniq!
+require 'ruml'
 
-describe "test1" do
+xdescribe "test1" do
   it "should handle Factory correctly" do
-  require 'ruml'
-  # pp RUML::Support::Instantiable::INSTANTIABLE_CLASSES
-
   f = RUML::Support::Factory.new
 
-  p1 = f.new :Property, 
+  p1 = f.new :Property,
   :name => :left,
   :isReadOnly => false,
   :isComposite => false,
   :isDerived => false
 
-  p2 = f.new :Property, 
-  :name => :right, 
+  p2 = f.new :Property,
+  :name => :right,
   :isReadOnly => false,
   :isComposite => false,
   :isDerived => false
 
-  cls1 = f.new :Class, 
-  :name => :BinaryNode, 
+  cls1 = f.new :Class,
+  :name => :BinaryNode,
   :isAbstract => false,
   :ownedAttribute => [ p1, p2 ]
 

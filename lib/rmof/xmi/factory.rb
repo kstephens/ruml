@@ -76,7 +76,7 @@ module RMOF
       attr_accessor :object_id, :id
       attr_accessor :xmlns, :name
       attr_accessor :type, :type_prefix, :type_name
-      attr_accessor :package, :namespace, :_class
+      attr_accessor :package, :namespace, :class_
       attr_accessor :module, :module_name, :modules
       attr_accessor :imports
       attr_accessor :url, :line

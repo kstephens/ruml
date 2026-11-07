@@ -3,31 +3,37 @@ require 'ruml/builder'
 
 module RUML
   module UML2
-    RUML::Builder.new(:target => self) do
+    RUML::Builder.new(target: self) do
       package :Core do
         package :PrimitiveTypes do
-          _class :Boolean do
+          class_ :Boolean do
             stereotype :primitive
+
+            coerceions = {
+              nil => false,
+              0 => false,
+              1 => true,
+              true => true,
+              false => false,
+              :true   => true,
+              :false  => false,
+              'true'  => true,
+              'false' => false,
+              '1'     => true,
+              '0'     => false,
+            }
 
             method :coerce, :class do | x |
               case x
-              when true, false
-                x == true
-              when Integer
-                x != 0
-              when :true, :false
-                x == :true
-              when 'true', 'false'
-                x == 'true'
-              when '1', '0'
-                x != '0'
+              when Integer then x != 0
               else
-                raise ArgumentError, "given #{self}"
+                val = coerceions[x]
+                raise ArgumentError, "coerce : #{self} : given #{x.inspect}" if val.nil?
               end
             end
           end # Boolean
 
-          _class :String do
+          class_ :String do
             stereotype :primitive
 
             method :coerce, :class do | x |
@@ -35,7 +41,7 @@ module RUML
             end
           end # String
 
-          _class :Integer do
+          class_ :Integer do
             stereotype :primitive
 
             method :coerce, :class do | x |
@@ -43,73 +49,58 @@ module RUML
             end
           end # Integer
 
-          _class :UnlimitedNatural, :Integer do 
+          class_ :UnlimitedNatural, :Integer do
             stereotype :primitive
 
             method :initialize do | rep |
+              binding.pry
               @rep = rep
             end
 
-            constant(:INFINITY) { new(:*) }
-
-            method :to_s do
-              @rep.to_s
-            end
-            method :inspect do
-              @rep.inspect
-            end
-
-            method :>= do | x |
-              true
-            end
-
-            method :<= do | x |
-              x != self.INFINITY
-            end
-
-            method :> do | x |
-              x != self.INFINITY
-            end
-
-            method :< do | x |
-              x != self.INFINITY
-            end
+            _unbounded_value_ = 12345678901234567890
+            _unbounded_ = new(_unbounded_value_)
 
             method :coerce, :class do | x |
-              $stderr.puts "#{self}.coerce #{x.inspect}"
+              # $stderr.puts "#{self}.coerce #{x.inspect}"
               case x
               when :*, '*'
-                self.INFINITY
+                _unbounded_
               else
                 i = x.to_i
-                raise ArgumentError, "not greater than zero" unless i > 0
+                raise ArgumentError, "not >= 0" unless i >= 0
                 i
               end
             end
-          end # 
-
+            method :unbounded, :class do
+              _unbounded_
+            end
+          end #
         end # PrimitiveTypes
+      end
+    end._compile(language: :ruby) # Builder.new
+  end
+end
 
 =begin
     package :Abstractions
 
       package :Elements do
-        _class :Element do
+        class_ :Element do
           isAbstract true # ???
         end
       end # Elements
 
       package :Ownerships do
-        _class :Element do
+        class_ :Element do
           isAbstract true # ???
           generalization 'Elements::Element'
-        end 
+        end
 
         association \
         :owner,        Element, 0..1, { :aggregation => true, :union => true },
         :ownedElement, Element, :*,   { :union => true }
 
-        method :allOwnedElements do 
+        method :allOwnedElements do
           acc = [ ]
           stk = [ self ]
           while obj = stk.pop
@@ -128,12 +119,12 @@ module RUML
 
 
       package :Relationships do
-        _class :Relationship do
+        class_ :Relationship do
           isAbstract true # ???
           generalization 'Ownerships::Element'
         end
 
-        _class :DirectedRelationship do
+        class_ :DirectedRelationship do
           isAbstract true # ???
           generalization :Relationship
         end
@@ -154,16 +145,16 @@ module RUML
 
 
       package :Namespaces do
-        _class :NamedElement do
+        class_ :NamedElement do
           isAbstract true # ???
           generalization 'Ownerships::Element'
-          
+
           property :name, 'PrimitiveTypes::String'
-          
+
           method :qualifiedName do
             allNamespaces.join(separator)
           end
-          
+
           SEPARATOR = '::'.freeze unless defined? SEPARATOR
           method :separator do
             SEPARATOR
@@ -173,8 +164,8 @@ module RUML
             "\#<#{self.class} #{name.inspect} ...>"
           end
         end
-        
-        _class :Namespace
+
+        class_ :Namespace
           isAbstract true # ???
           generalization :NamedElement
         end
@@ -182,44 +173,44 @@ module RUML
         association \
         :namespace,   Namespace,     0..1, { :readOnly => true, :union => true, :subsets => :owner,  },
         :ownedMember, NamedElement,  :*, { :readOnly => true, :union => true, :subsets => [ :member, :ownedElement ], }
-        
+
         association \
         :owner,       Namespace,     :*, { :navigable => false },
         :member,      NamedElement,  :*, { :readOnly => true, :union => true, }
 
       end # Namespaces
 
-      
+
       package :Expressions do
-        _class :ValueSpecification do
+        class_ :ValueSpecification do
           isAbstract true # ???
           generalization 'Ownerships::Element'
         end
 
-        _class :OpaqueExpression do
+        class_ :OpaqueExpression do
           generalization :ValueSpecification
           property :body, :String, :*, { :ordered => true }
           property :language, :String, :*, { :ordered => true }
         end
 
-        _class :Expression do
+        class_ :Expression do
           generalization :ValueSpecification
           property :symbol, :String
         end
 
         association \
         :expression, :Expression,         0..1, { :subsets => :owner, :aggregation => true },
-        :operand,    :ValueSpecification, :*,   { :subsets => :ownedElement, :ordered => true }        
+        :operand,    :ValueSpecification, :*,   { :subsets => :ownedElement, :ordered => true }
       end # Expressions
 
 
       package :Classifiers do
-        _class :Classifier
+        class_ :Classifier
           isAbstract true # ???
           generalization 'Namespaces::Namespace'
         end # Classifier
 
-        _class :Feature do
+        class_ :Feature do
           isAbstract true # ???
           generalization 'Namespaces::NamedElement'
         end # Feature
@@ -231,12 +222,12 @@ module RUML
 
 
       package :TypedElements do
-        _class :Type do
+        class_ :Type do
           isAbstract true # ???
           generalization 'Namespaces::NamedElement'
         end # Type
 
-        _class :TypedElement do
+        class_ :TypedElement do
           isAbstract true # ???
           generalization 'Namespaces::NamedElement'
         end # TypedElement
@@ -248,7 +239,7 @@ module RUML
 
 
       package :StructuralFeatures do
-        _class :StructuralFeature do
+        class_ :StructuralFeature do
           isAbstract true # ???
           generalization 'TypedElements::TypedElement', 'Classifiers::Feature'
         end
@@ -257,12 +248,12 @@ module RUML
 
       # imports PrimitiveTypes
       package :BehaviorialFeatures do
-        _class :BehavioralFeature do
+        class_ :BehavioralFeature do
           isAbstract true # ???
           generalization 'Classifiers::Feature', 'Namespaces::Namespace'
         end
-        
-        _class :Parameter do
+
+        class_ :Parameter do
           generalization 'TypedElements::TypedElement', 'Namespaces::NamedElement'
         end # Parameter
 
@@ -272,18 +263,18 @@ module RUML
       end # BehaviorialFeatures
 
       package :Changeabilities do
-        _class :StructuralFeature do
+        class_ :StructuralFeature do
           isAbstract true # ???
           generalization 'BehaviorialFeatures::BehavioralFeature'
-        
+
           property :isReadOnly, 'PrimitiveTypes::Boolean', 1, { :default => 'false' }
         end
       end # Changeabilities
 
       package :Multiplicities do
-        import :PrimitiveTypes 
+        import :PrimitiveTypes
 
-        _class :MultiplicityElement do
+        class_ :MultiplicityElement do
           isAbstract true # ???
           generalization 'Elements::Element'
 
@@ -317,7 +308,7 @@ module RUML
 
 
       package :Comments do
-        _class :Comment
+        class_ :Comment
           generalization 'Ownerships::Element'
 
           property :body, 'PrimitiveTypes::String'
@@ -341,22 +332,22 @@ module RUML
 
     package :Basic do
       import \
-      :PrimitiveTypes, 
-      'Abstractions::Namespaces', 
+      :PrimitiveTypes,
+      'Abstractions::Namespaces',
       'Abstractions::TypedElements',
       'Abstractions::Multiplicities'
-      
-      _class :Comment do
+
+      class_ :Comment do
         generalization 'Abstractions::Comments::Comment'
       end
 
-      _class :Class do
+      class_ :Class do
         generalization :Type
 
         property :isAbstract, :Boolean
       end
 
-      _class :Property do
+      class_ :Property do
         generalization :TypedElement, :MultiplicityElement
 
         property :isReadOnly,  :Boolean
@@ -366,32 +357,32 @@ module RUML
       end
 
 
-      _class :Operation do
+      class_ :Operation do
         generalization :TypedElement, :MultiplicityElement
       end
 
-      _class :Parameter do
+      class_ :Parameter do
         generalization :TypedElement, :MultiplicityElement
       end
 
-      _class :DataType do
+      class_ :DataType do
         isAbstract true
         generalization :Type
       end
-      
-      _class :PrimitiveType do
+
+      class_ :PrimitiveType do
         generalization :DataType
       end
 
-      _class :Enumeration do
+      class_ :Enumeration do
         generalization :DataType
       end
 
-      _class :EnumerationLiteral do
+      class_ :EnumerationLiteral do
         generalization :NamedElement
       end
 
-      _class :Package do
+      class_ :Package do
         generalization :NamedElement
       end
 
@@ -438,17 +429,17 @@ module RUML
     package :Constructs do
       import :Abstractions
 
-      _class :Type do
+      class_ :Type do
         isAbstract true # ???
         generalization 'TypedElements::Type'
       end
 
-      _class :PackageableElement do
+      class_ :PackageableElement do
         isAbstract true # ???
         generalization 'Namespaces::NamedElement'
       end
 
-      _class :Package do
+      class_ :Package do
         generalization 'Namespaces::Namespace', 'PackageableElement'
       end
 
@@ -464,25 +455,22 @@ module RUML
       :nestingPackage,   :Package, 0..1, { :subsets => :namespace, :aggregation => true },
       :nestedPackage,    :Package, :*,   { :subsets => :packagedElement }
 
-      _class :Association do
+      class_ :Association do
         generalization 'Namespaces::NamedElement'
       end
-      
-      _class AssociationEnd do
+
+      class_ AssociationEnd do
         generalization 'Namespaces::NamedElement'
       end
     end # Constructs
-=end
 
       end # Core
 
 
       package :Profiles do
       end # Profiles
-
-    end.compile(:language => :ruby, :target => RUML::UML2) # Builder.new
-
+    end
   end # UML2
 end # RUML
 
-
+=end

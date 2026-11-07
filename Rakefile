@@ -1,21 +1,6 @@
 require 'rubygems'
 require 'rake'
 
-begin
-  require 'jeweler'
-  Jeweler::Tasks.new do |gem|
-    gem.name = "ruml"
-    gem.summary = %Q{TODO}
-    gem.email = "ks.github@kurtstephens.com"
-    gem.homepage = "http://github.com/kstephens/ruml"
-    gem.authors = ["Kurt Stephens"]
-    # gem is a Gem::Specification... see http://www.rubygems.org/read/chapter/20 for additional settings
-  end
-
-rescue LoadError
-  puts "Jeweler (or a dependency) not available. Install it with: sudo gem install jeweler"
-end
-
 require 'rake/testtask'
 Rake::TestTask.new(:test) do |test|
   test.libs << 'lib' << 'test'
@@ -23,13 +8,13 @@ Rake::TestTask.new(:test) do |test|
   test.verbose = true
 end
 
-require 'spec/rake/spectask'
+require 'rspec/core/rake_task'
 desc "Run all spec/ tests."
-Spec::Rake::SpecTask.new(:test_spec) do |t|
-  t.spec_files = FileList['spec/**/*_spec.rb']
+RSpec::Core::RakeTask.new(:test_spec) do |t|
+  t.pattern = FileList['spec/**/*_spec.rb']
 end
 
-task :test => [ :test_spec ] 
+task :test => [ :test_spec ]
 
 begin
   require 'rcov/rcovtask'
@@ -47,7 +32,7 @@ end
 
 task :default => :test
 
-require 'rake/rdoctask'
+require 'rdoc/task'
 Rake::RDocTask.new do |rdoc|
   if File.exist?('VERSION.yml')
     config = YAML.load(File.read('VERSION.yml'))

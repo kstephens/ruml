@@ -8,5 +8,4 @@ module RUML
 end # RUML
 
 require 'ruml/support'
-require 'ruml/uml'
-
+require 'ruml/extensions'

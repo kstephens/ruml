@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Loosely follows subset of MOF/2.5.1.
 module RUML::Boot
 

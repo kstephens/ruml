@@ -5,6 +5,74 @@ module Support
   N = 1000000000000000 unless defined? N
   STAR = (0 .. N) unless defined? STAR
 
+  class Error < StandardError ; end
+  class UninstantiableError < Error ; end
+
+  module Uninstantiable
+    def self.included base
+      super
+      base.extend(ModuleMethods)
+      base.include(InstanceMethods)
+      # !!!
+      # base.send(:remove_const, :ModuleMethods)
+      # base.send(:remove_const, :InstanceMethods)
+    end
+    module ModuleMethods
+    end
+    module InstanceMethods
+      def initialize *args
+        raise UninstantiableError, "#{self.class}"
+      end
+    end
+  end
+
+  module Instantiable
+    def self.included base
+      super
+      base.extend(ModuleMethods)
+      base.include(InstanceMethods)
+      # !!!
+      # base.send(:remove_const, :ModuleMethods)
+      # base.send(:remove_const, :InstanceMethods)
+    end
+
+    module ModuleMethods
+    end
+
+    module InstanceMethods
+      def _initialize opts = nil, &blk
+        opts ||= EMPTY_Hash
+        opts.each do | k, v |
+          s = :"#{k}="
+          if respond_to? s
+            send(s, v)
+          else
+            instance_variable_set("@#{k}", v)
+          end
+        end
+        if block_given?
+          instance_eval &blk
+        end
+        self
+      end
+      alias :initialize :_initialize
+    end
+
+=begin
+    def self.instantiable
+      @@instantiable ||= {}
+    end
+    def self.is_instantiable x
+      return instantiable[x] if is_instantiable.key?(x)
+      case x
+      when ::Module
+        self.is_instantiable[m] = x.ancestors.any{|m| is_instantiable(m)}
+      end
+    end
+=end
+
+  end
+
   module CodeGenerationCore
     def _class_eval cls, str, file, line
       $stderr.puts "\nclass #{cls}\n#{str}\nend\n\n" if @verbose
@@ -387,41 +455,6 @@ RUBY
   end
 
   # Basic mixin for all UML instantitable objects.
-  module Instantiable
-    INSTANTIABLE_CLASSES = { }
-    def self.included base
-      super
-      base.extend(ClassMethods)
-      name = base.to_s
-      short_name = name.sub(/\A.*::/, '')
-      INSTANTIABLE_CLASSES[name.freeze] =
-      INSTANTIABLE_CLASSES[short_name.freeze] =
-      INSTANTIABLE_CLASSES[short_name.to_sym] =
-        base
-    end
-
-    module ClassMethods
-    end
-
-
-    def _initialize opts = nil, &blk
-      opts ||= EMPTY_Hash
-      opts.each do | k, v |
-        s = :"#{k}="
-        if respond_to? s
-          send(s, v)
-        else
-          instance_variable_set("@#{k}", v)
-        end
-      end
-      if block_given?
-        instance_eval &blk
-      end
-      self
-    end
-    alias :initialize :_initialize
-
-  end
 
 end # module
 
