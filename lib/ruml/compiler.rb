@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'ruml'
 require 'ruml/support'
 require 'ruml/logging'

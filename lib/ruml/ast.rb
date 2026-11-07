@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module RUML
 
   # Understands a small DSL for UML modeled in subset of UML Substructure.

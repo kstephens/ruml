@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require 'rmof/xmi/resolver'
 require 'ruml/traverser'
 
