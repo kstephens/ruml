@@ -83,7 +83,7 @@ module RUML
       def namespace_path
         node, result = self.node, []
         while node
-          result << node
+          result << node if node.name
           node = node.namespace
         end
         result.reverse!
@@ -93,7 +93,7 @@ module RUML
         namespace_path.map(&:name).compact.map!(&:to_s).join("::")
       end
 
-      def root
+      def root # -> Node
         node = self.node
         while node.namespace
           node = node.namespace
@@ -101,21 +101,47 @@ module RUML
         node
       end
 
-      def find *names
-        names = names[0].to_s.split("::") if ::String === names[0]
+      def find *args # -> Node
+        names = convert_path(args)
+        pp(args: args, name: names)
         base = node
         if names[0] == ""
           base = root
           names.shift
         end
         names.inject(base) do | node, name |
-          return unless node
-          node.ownedElement.find{|c| c.name == name.to_s}
+          pp(node: node, name: name)
+          found = node._.ownedElement_by_name(name)
+          return unless found
+          node = found
         end
       end
 
+      def convert_path args
+        names = []
+        while args
+          arg = args.shift
+          case arg
+          when ::String, ::Symbol
+            names.concat(arg.to_s.split("::"))
+          when ::Array
+            args.unshift(arg)
+          when Node
+            names.concat(namespace_path(arg).map(&:name))
+          else
+            raise ArgumentError, "convert_path : unexpected #{arg.inspect}"
+          end
+        end
+        names
+      end
+
+      def ownedElement_by_name name
+        name = name.to_s
+        node.ownedElement.find{|c| c.name == name}
+      end
+
       def isClassMethod
-        meta == :method && node.args.include?(:class)
+        meta == :method && args.include?(:class)
       end
 
       def isAbstract

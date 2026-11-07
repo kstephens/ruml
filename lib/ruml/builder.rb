@@ -62,7 +62,7 @@ RUBY
 
     def _make_node meta, *args, &blk
       _log { "#{meta} \#{args.inspect} \#{blk && '&blk'}" }
-      name = args[0].to_s
+      name = args[0]&.to_s # The root node has no name.
       node = ::RUML::AST::Node[
         name: name,
         namespace: @namespace,

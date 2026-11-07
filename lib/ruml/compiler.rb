@@ -96,13 +96,12 @@ module RUML
       # target.const_set(:RUML_COMPILER_NODE, node)
       @created << target
 
-      node_info = AST::Node.new(
+      node._.to_h.update(
         path: path,
         node_path_str: node_path_str,
         full_path_str: full_path_str,
         module: target,
       )
-      node._info = node_info
       _compile_ownedElement(node)
 
       _log { "}" }
