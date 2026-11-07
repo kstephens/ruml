@@ -4,7 +4,7 @@ require 'rmof/xmi'
 require 'rmof/xmi/introspection'
 
 module RUML
-  module Traverser
+  module TraverserMethods
     def initialize_traverse
       @traverse_depth = 0
       @traverse_stack = []
@@ -12,7 +12,7 @@ module RUML
     end
 
     def traversing ident=nil
-      @traverse_ident = ident
+      @traverse_ident = ident if ident
       initialize_traverse
       traverse_log ": ..."
       yield
@@ -40,5 +40,15 @@ module RUML
     def traverse_log m
       $stderr.puts "### #{self.class.name} : traversing #{@traverse_ident} : #{"  " * @traverse_depth} #{m}"
     end
+  end
+  class Traverser
+    include TraverserMethods
+    def initialize ident=nil
+      initialize_traverse
+      @traverse_ident = ident
+    end
+    def stack  ; @traverse_stack ; end
+    def push x ; @traverse_stack << x ; end
+    def current ; @traverse_stack[-1] ; end
   end
 end
