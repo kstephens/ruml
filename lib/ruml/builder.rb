@@ -21,7 +21,8 @@ module RUML
       @opts = opts
       @_log_verbose = true # @opts[:verbose]
       @created = [ ]
-      @root = @opts[:root] || AST::Node[meta: :root]
+      @root = @opts[:root] || _make_node(:root)
+      # !!! use Traverser
       @namespace = @root
       @namespace_stack = [ ]
       @result = instance_eval(&blk) if block_given?
@@ -62,28 +63,28 @@ RUBY
     def _make_node meta, *args, &blk
       _log { "#{meta} \#{args.inspect} \#{blk && '&blk'}" }
       name = args[0].to_s
-      path = @namespace_stack.map(&:name).compact.join('::')
-      obj = ::RUML::AST::Node[
+      node = ::RUML::AST::Node[
         name: name,
-        # !!! Move these into _info:
-        meta: meta,
-        type: meta,
-        args: args,
-        blk: blk,
-        namespace_path: path,
-        # !!!
         namespace: @namespace,
         ownedElement: [],
         owner: @namespace,
       ]
-      (@namespace[name] ||= [ ]).push(obj).uniq!
-      @created << obj
-      obj
+      node._.to_h.update(
+        meta: meta,
+        type: meta,
+        name: name,
+        args: args,
+        blk: blk,
+      )
+
+      (@namespace[name] ||= [ ]).push(node).uniq! if @namespace
+      @created << node
+      node
     end
 
     def _desc node
-      path_str = node._namespace_str
-      "#{self.class}._namespace : #{node.inspect} @ #{path_str}"
+      path_str = node._.namespace_str
+      "#{self.class} #{node.inspect} @ #{path_str}"
     end
 
     collector :import, :stereotype, :property, :association, :constant, :parameter, :generalization
@@ -104,10 +105,6 @@ RUBY
           parameter name
         end
       end
-    end
-
-    def namespace_str path
-      path.map{|node| node.name}.compact.map(&:to_s).join("::")
     end
 
     def _namespace type, name, args, instance_blk=nil, &inner_blk

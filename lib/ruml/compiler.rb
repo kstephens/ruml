@@ -4,6 +4,7 @@ require 'ruml'
 require 'ruml/support'
 require 'ruml/logging'
 require 'ruml/ast'
+require 'method_source'
 
 module RUML
   class Compiler
@@ -35,7 +36,8 @@ module RUML
     end
 
     def compile node
-      sel = [ :"compile_#{node.meta}_#{pass}", :"compile_#{node.meta}" ].find do | sel |
+      meta = node._.meta
+      sel = [ :"compile_#{meta}_#{pass}", :"compile_#{meta}" ].find do | sel |
         respond_to?(sel)
       end
       _log { "compile : pass=#{pass} : sel=#{sel.inspect} : #{node.inspect}" }
@@ -64,9 +66,8 @@ module RUML
     def compile_namespace_1 node
       raise "target is nil" if target.nil?
 
-      path = node._namespace_path
-      path.reject!{|ns| ! ns.name}
-      node_path_str = path.map(&:name).join("::")
+      path = node._.namespace_path
+      node_path_str = path.map(&:name).compact.join("::")
       full_path_str = @target.to_s + "::" + node_path_str
       _log { "#{full_path_str} { " }
 
@@ -76,7 +77,7 @@ module RUML
         class: "class",
         root: nil,
       }
-      kind = meta_kind.fetch(node.meta)
+      kind = meta_kind.fetch(node._.meta)
       lines = [""]
       lines << "#{kind} #{full_path_str}"
       lines << "  module RUML_InstanceBehavior"
@@ -118,12 +119,12 @@ module RUML
     def _compile_generalizations node
       raise unless node
       lines = []
-      node_path = node._info.full_path_str
+      node_path = node._.full_path_str
       gens = (node.generalization || EMPTY_ARRAY).map do | name |
         gen = resolve(node, name)
-        gen._info.full_path_str
+        gen._.full_path_str
       end
-      if node._isAbstract
+      if node._.isAbstract
         gens << "::RUML::Support::Uninstantiable"
       else
         gens << "::RUML::Support::Instantiable"
@@ -139,8 +140,8 @@ module RUML
     def compile_method_2 node
       name = node.name.to_sym
       parent = node.namespace
-      expr = parent._info.full_path_str.dup
-      if node._isClassMethod
+      expr = parent._.full_path_str.dup
+      if node._.isClassMethod
         expr << "::RUML_ModuleBehavior"
       else
         expr << "::RUML_InstanceBehavior"
@@ -151,7 +152,7 @@ module RUML
 
     def compile_constant_2 node
       name = node.name.to_sym
-      target = node.namespace._info.module
+      target = node.namespace._.module
       return if target.constants.include?(name)
       val = args[1]
       val = target.instance_eval(&node.blk) if node.blk
@@ -161,7 +162,7 @@ module RUML
 
     def compile_import_2 node
       parent = node.namespace
-      dst = node._info.module
+      dst = node._.module
       node.args.flatten.each do | name |
         src = resolve(parent, name).module
         src.constants.each do | n |
@@ -223,7 +224,7 @@ module RUML
 
     def node_const_set(node, target, name, value)
       name_upper = name.to_s.upper.to_sym
-      expr = node_code(node, "#{node._info.full_path_str}.const_set(#{name_upper.inspect}, #{value.inspect})")
+      expr = node_code(node, "#{node._.full_path_str}.const_set(#{name_upper.inspect}, #{value.inspect})")
       target.const_set(name_upper, value)
       blk = lambda { value }
       node_define_method(node, target, name, blk)
@@ -231,7 +232,8 @@ module RUML
 
     def node_define_method(node, target, name, blk)
       _log { "node_define_method : #{node.inspect}"}
-      expr = node_code(node, "#{node._info.full_path_str}.define_method(#{name.inspect}, &blk)")
+      _log { "blk = #{blk.source}" }
+      expr = node_code(node, "#{node._.full_path_str}.define_method(#{name.inspect}, &blk)")
       target.define_method(name, &blk)
     end
 
@@ -263,7 +265,7 @@ DESC
       return @module_to_node[name] if @module_to_node[name]
       return name if AST::Node === name
       while node
-        if found = node._find(name)
+        if found = node._.find(name)
           return found
         end
         node = node.namespace

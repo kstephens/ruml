@@ -2,6 +2,7 @@
 
 require 'rmof/xmi/resolver'
 require 'ruml/traverser'
+require 'method_source'
 
 module RMOF
   module XMI

@@ -71,10 +71,8 @@ module RUML
       end
     end
 
-    class Node < Base
+    class Meta < Base
       ATTRS = %i[meta type name args].freeze
-
-      def _ ; @_ ||= Base.new({}) ; end
 
       def _desc_
         @_desc_ ||= ATTRS.map do |name|
@@ -82,32 +80,32 @@ module RUML
         end.join(' ').freeze
       end
 
-      def _namespace_path
-        node, path = self, []
+      def namespace_path
+        node, result = self.node, []
         while node
-          path << node
+          result << node
           node = node.namespace
         end
-        path.reverse!
+        result.reverse!
       end
 
-      def _namespace_str
-        _namespace_path.map(&:name).compact.map(&:to_s).join("::")
+      def namespace_str
+        namespace_path.map(&:name).compact.map!(&:to_s).join("::")
       end
 
-      def _root
-        node = self
+      def root
+        node = self.node
         while node.namespace
           node = node.namespace
         end
         node
       end
 
-      def _find *names
+      def find *names
         names = names[0].to_s.split("::") if ::String === names[0]
-        base = self
+        base = node
         if names[0] == ""
-          base = _root
+          base = root
           names.shift
         end
         names.inject(base) do | node, name |
@@ -116,39 +114,62 @@ module RUML
         end
       end
 
-      def _isClassMethod
-        meta == :method && args.include?(:class)
+      def isClassMethod
+        meta == :method && node.args.include?(:class)
       end
 
-      def _isAbstract
-        meta == :class && !! isAbstract
-        # while node
-        #   return true if node.meta == :class && node.isAbstract
-        #   node = node.namespace
-        # end
-        # false
+      def isAbstract
+        meta == :class && !! node.isAbstract
+      end
+    end
+
+    class Node < Base
+      def _ ; @_ ||= Meta.new({node: self}) ; end
+
+      ATTRS = %i[name].freeze
+
+      def _desc_
+        @_desc_ ||= (ATTRS.map do |name|
+          "#{name}=#{self.__send__(name).inspect}"
+        end.join(' ') + " " + _._desc_).freeze
       end
     end
 
     class Navigable < ::BasicObject
       include Repr
       attr_reader :_repr, :_path
-      def initialize repr, path = []
-        @_repr = repr
-        @_path = path
+
+      def self.[] v
+        __coerce__(v, [])
       end
 
-      def [] i
-        case v = @_repr[i]
-        when ::Hash, ::Array, Navigable
-          Navigable.new(v, @_path + [i])
+      def self.__coerce__ v, path
+        case v
+        when Navigable
+          v
+        when ::Hash, ::Array
+          Navigable.new(v, path)
         else
           v
         end
       end
 
+      def initialize repr, path
+        @_repr = repr
+        @_path = path
+      end
+
+      def [] i
+        __coerce__(@_repr[i],  @_path + [i])
+      end
+
+      def responds_to? name
+        ::Hash == @_repr && @_repr.key?(name)
+      end
+
       def method_missing name, *args, &blk
         raise unless args.empty?
+        raise if blk
         case @_repr
         when ::Hash, Navigable
           Navigable.new(@_repr[name], @_path + [name])
