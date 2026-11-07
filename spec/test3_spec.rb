@@ -3,13 +3,11 @@
 require 'ruml/uml2'
 
 describe "UML2" do
-  it "should handle UnlimtedNatural" do
+  it "handles UnlimitedNatural" do
     un = RUML::UML2::Core::PrimitiveTypes::UnlimitedNatural
-    binding.pry
     ub = un.unbounded
 
-    un.class.inspect.should == 'Class'
-    un.coerce(:*).inspect.should == ub.inspect
-    un.coerce("*").inspect.should == ub.inspect
+    expect(un.coerce(:*).inspect).to eq(ub.inspect)
+    expect(un.coerce("*").inspect).to eq(ub.inspect)
   end # it
 end # describe

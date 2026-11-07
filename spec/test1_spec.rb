@@ -2,8 +2,8 @@
 
 require 'ruml'
 
-xdescribe "test1" do
-  it "should handle Factory correctly" do
+describe "test1", skip: true do
+  it "handles Factory correctly" do
   f = RUML::Support::Factory.new
 
   p1 = f.new :Property,
@@ -46,5 +46,4 @@ xdescribe "test1" do
   $cls1 = cls1
   end # it
 end # describe
-
 

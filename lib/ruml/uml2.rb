@@ -1,8 +1,13 @@
+# frozen_string_literal: true
+
 require 'ruml/support'
 require 'ruml/builder'
 
 module RUML
+  UNBOUNDED_VALUE = 12345678901234567890
+
   module UML2
+
     RUML::Builder.new(target: self) do
       package :Core do
         package :PrimitiveTypes do
@@ -53,28 +58,26 @@ module RUML
             stereotype :primitive
 
             method :initialize do | rep |
-              binding.pry
               @rep = rep
             end
 
-            _unbounded_value_ = 12345678901234567890
-            _unbounded_ = new(_unbounded_value_)
+            method :to_i do @rep.to_i end
 
             method :coerce, :class do | x |
-              # $stderr.puts "#{self}.coerce #{x.inspect}"
               case x
               when :*, '*'
-                _unbounded_
+                unbounded
               else
                 i = x.to_i
                 raise ArgumentError, "not >= 0" unless i >= 0
                 i
               end
             end
+
             method :unbounded, :class do
-              _unbounded_
+              @unbounded ||= new(UNBOUNDED_VALUE)
             end
-          end #
+          end
         end # PrimitiveTypes
       end
     end._compile(language: :ruby) # Builder.new

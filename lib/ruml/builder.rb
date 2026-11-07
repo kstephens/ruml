@@ -42,7 +42,7 @@ module RUML
     def _compile(opts = { })
       opts = @opts.merge(opts)
       c = Compiler.new(opts)
-      c.compile(@root)
+      c.run(@root)
       c
     end
 
@@ -64,15 +64,17 @@ RUBY
       name = args[0].to_s
       path = @namespace_stack.map(&:name).compact.join('::')
       obj = ::RUML::AST::Node[
+        name: name,
+        # !!! Move these into _info:
         meta: meta,
         type: meta,
-        name: name,
         args: args,
         blk: blk,
-        namespace: @namespace,
         namespace_path: path,
+        # !!!
+        namespace: @namespace,
         ownedElement: [],
-        # owner: nil,
+        owner: @namespace,
       ]
       (@namespace[name] ||= [ ]).push(obj).uniq!
       @created << obj
@@ -132,7 +134,7 @@ RUBY
       node
     end
 
-    def method_missing sel, *args, &blk
+    def x_method_missing sel, *args, &blk
       sel_s = sel.to_s
       case sel_s
       when /\A([a-z0-9_]+)\Z/i

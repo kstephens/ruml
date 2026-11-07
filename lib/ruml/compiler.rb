@@ -7,6 +7,7 @@ require 'ruml/ast'
 
 module RUML
   class Compiler
+    class Error < StandardError ; end
     include RUML::Support::CodeGeneration, Logging
     EMPTY_ARRAY = [ ].freeze unless defined? EMPTY_ARRAY
 
@@ -14,24 +15,26 @@ module RUML
     attr_reader :target, :pass
 
     # Outputs:
-    attr_reader :created, :path_to_module
+    attr_reader :created, :module_to_node
 
     def initialize opts = nil, &blk
       opts ||= { } # EMPTY_HASH
       @opts = opts
       self._log_verbose = true # @opts[:verbose]
       @created = [ ]
-      @target = @opts.fetch(:target)
-      @target_stack = [ ]
+      @target = opts[:target]
       @current = nil
       @current_stack = [ ]
+      @module_to_node = { }
       @pass = 1
-      @path_to_module = { }
       raise ArgumentError, ":target not a Module : #{@target.inspect}" unless Module === @target
     end
 
+    def run node
+      compile(node)
+    end
+
     def compile node
-      raise "node is nil" if node.nil?
       sel = [ :"compile_#{node.meta}_#{pass}", :"compile_#{node.meta}" ].find do | sel |
         respond_to?(sel)
       end
@@ -46,7 +49,7 @@ module RUML
 
     def compile_root_1 node
       node.ownedElement.each { | x | compile(x) }
-      @pass += 1
+      @pass = 2
       node.ownedElement.each { | x | compile(x) }
     end
 
@@ -60,18 +63,13 @@ module RUML
 
     def compile_namespace_1 node
       raise "target is nil" if target.nil?
-      meta, type, name, args, blk = node.to_h.project(:meta, :type, :name, :args, :blk)
 
-      lines = [""]
       path = node._namespace_path
       path.reject!{|ns| ! ns.name}
       node_path_str = path.map(&:name).join("::")
       full_path_str = @target.to_s + "::" + node_path_str
       _log { "#{full_path_str} { " }
 
-      pp(node: node, path: path, full_path_str: full_path_str)
-
-      generalizations = node.generalizations&.dup || []
       meta_kind = {
         package: "module",
         namespace: "module",
@@ -79,9 +77,9 @@ module RUML
         root: nil,
       }
       kind = meta_kind.fetch(node.meta)
+      lines = [""]
       lines << "#{kind} #{full_path_str}"
       lines << "  module RUML_InstanceBehavior"
-      # If it's a non-abstract class, make it instantiable.
       lines << "  end"
       lines << "  module RUML_ModuleBehavior"
       lines << "  end"
@@ -93,6 +91,7 @@ module RUML
       lines << ""
 
       target = node_eval(node, lines)
+      @module_to_node[target] = node
       # target.const_set(:RUML_COMPILER_NODE, node)
       @created << target
 
@@ -100,8 +99,7 @@ module RUML
         path: path,
         node_path_str: node_path_str,
         full_path_str: full_path_str,
-        generalizations: generalizations,
-        module: @target,
+        module: target,
       )
       node._info = node_info
       _compile_ownedElement(node)
@@ -111,24 +109,30 @@ module RUML
 
     def compile_namespace_2 node
       _compile_ownedElement(node)
-      _compile_children(node, :stereotype, :import, :constant, :property, :method)
+      _compile_children(node, :stereotype, :import)
+      # binding.pry if node.name == "Cls4"
       _compile_generalizations node
-      _compile_children(node, :association)
+      _compile_children(node, :property, :association, :method, :constant)
     end
 
     def _compile_generalizations node
-      generalizations = node.generalization || EMPTY_ARRAY
+      raise unless node
       lines = []
       node_path = node._info.full_path_str
-      if isAbstract(node)
-        lines << "#{node_path}.include(::RUML::Support::Uninstantiable)"
-      else
-        lines << "#{node_path}.include(::RUML::Support::Instantiable)"
+      gens = (node.generalization || EMPTY_ARRAY).map do | name |
+        gen = resolve(node, name)
+        gen._info.full_path_str
       end
-      generalizations.each do | gen |
-        gen_path = gen._info.full_path_str
+      if node._isAbstract
+        gens << "::RUML::Support::Uninstantiable"
+      else
+        gens << "::RUML::Support::Instantiable"
+      end
+      gens.each do | gen_path |
         lines << "#{node_path}.include(#{gen_path})"
       end
+      lines << "#{node_path}.include(#{node_path}::RUML_InstanceBehavior)"
+      lines << "#{node_path}.extend(#{node_path}::RUML_ModuleBehavior)"
       node_eval(node, lines)
     end
 
@@ -136,45 +140,41 @@ module RUML
       name = node.name.to_sym
       parent = node.namespace
       expr = parent._info.full_path_str.dup
-      if isClassMethod(node)
+      if node._isClassMethod
         expr << "::RUML_ModuleBehavior"
       else
         expr << "::RUML_InstanceBehavior"
       end
       target = lookup_module(expr)
-      _log { "\nexpr=#{expr.inspect}\n" }
-      _log { "\ntarget=#{target.inspect}\n"  }
-      target.define_method(name, &node.blk)
-      binding.pry
-
-      # _log { "    => pim #{(target.public_instance_methods.sort - Object.methods).inspect}" }
-      # _log { "    => sm  #{(target.methods.sort - Object.methods).inspect}" }
+      node_define_method(parent, target, name, node.blk)
     end
 
     def compile_constant_2 node
       name = node.name.to_sym
+      target = node.namespace._info.module
       return if target.constants.include?(name)
+      val = args[1]
       val = target.instance_eval(&node.blk) if node.blk
       _log { "  constant #{node.name.inspect} = #{node.val.inspect}" }
-      target.const_set(name.to_s.upper.to_sym, val)
-      target.meta_def(name) { || val }
-      target.class_def(name) { || val }
+      node_const_set(node.namespace, target, name, val)
     end
 
-    def compile_import node
-      args = node.args
-      args.flatten.each do | x |
-        x.constants.each do | n |
-          cv = x.const_get(n)
-          _log { "  import #{target}::#{n} = #{x}::#{n}" }
-          target.const_set(n, cv)
+    def compile_import_2 node
+      parent = node.namespace
+      dst = node._info.module
+      node.args.flatten.each do | name |
+        src = resolve(parent, name).module
+        src.constants.each do | n |
+          v = x.const_get(n)
+          dst.const_set(n, v)
+          _log { "  import #{dst}::#{n} = #{x}::#{n}" }
         end
       end
     end
 
     def compile_stereotype_2 node
       args = node.args
-      @target.stereotype *args
+      # @target.stereotype *args
     end
 
     def compile_property_2 node
@@ -185,8 +185,9 @@ module RUML
 
     def compile_association_2 node
       args = node.args.dup
-      args[1] = _type(args[1]) || target
-      args[5] = _type(args[5]) || target
+      owner = node.namespace
+      args[1] = resolve(owner, args[1])
+      args[5] = resolve(owner, args[5])
       _generate_association *args
     end
 
@@ -210,36 +211,63 @@ module RUML
       end
     end
 
-    def isClassMethod node
-      node.meta == :method && node.args.include?(:class)
-    end
-
-    def isAbstract node
-      while node
-        return true if node.meta == :class && node.isAbstract
-        node = node.namespace
-      end
-      false
-    end
-
     def inside_namespace node, &blk
-      @target_stack.push @target
       @current_stack.push @current
       begin
         @current = node
-        @target = node._info.module if node._info
         yield node
       ensure
-        @target = @target_stack.pop
         @current = @current_stack.pop
       end
     end
 
+    def node_const_set(node, target, name, value)
+      name_upper = name.to_s.upper.to_sym
+      expr = node_code(node, "#{node._info.full_path_str}.const_set(#{name_upper.inspect}, #{value.inspect})")
+      target.const_set(name_upper, value)
+      blk = lambda { value }
+      node_define_method(node, target, name, blk)
+    end
+
+    def node_define_method(node, target, name, blk)
+      _log { "node_define_method : #{node.inspect}"}
+      expr = node_code(node, "#{node._info.full_path_str}.define_method(#{name.inspect}, &blk)")
+      target.define_method(name, &blk)
+    end
+
     def node_eval(node, expr)
-      expr = expr.join("\n") if ::Array === expr
-      _log { "node_eval : pass=#{pass} : #{node.inspect}"}
-      _log { "#{expr}" }
+      _log { "node_eval : #{node.inspect}" }
+      expr = node_code(node, expr)
       ::Kernel.eval(expr)
+    rescue => e
+      binding.pry
+      raise Error, "#{e.inspect} : in \n#{expr}"
+    end
+
+    def node_code(node, expr)
+      if ::Array === expr
+        expr = expr.map(&:to_s).join("\n")
+      end
+      expr = <<"DESC"
+
+# #########################################
+# #{node.inspect}
+#{expr}
+# #########################################
+
+DESC
+      _log { expr }
+      expr
+    end
+    def resolve node, name
+      return @module_to_node[name] if @module_to_node[name]
+      return name if AST::Node === name
+      while node
+        if found = node._find(name)
+          return found
+        end
+        node = node.namespace
+      end
     end
 
     def lookup_module str
@@ -252,6 +280,7 @@ module RUML
     def namespace_str path
       path.map{|node| node.name}.compact.map(&:to_s).join("::")
     end
-  end # Compiler
-end # RUML
 
+    def _log_prefix ; "pass #{pass}" ; end
+  end
+end

@@ -6,8 +6,14 @@ module RUML
   module AST
 
     module Repr
-      def [] n ; _repr[n] ; end
-      def []= n, v ; _repr[n] = v ; end
+      def [] n
+        raise "#{n}" unless ::Symbol == n
+        _repr[n]
+      end
+      def []= n, v
+        raise "#{n}" unless ::Symbol == n
+        _repr[n] = v
+      end
       def __class__
         ::Object.instance_method(:class).bind(self).call
       end
@@ -16,9 +22,9 @@ module RUML
       end
       def method_missing name, *args, &blk
         name = name.to_sym
-        line = "?:?" # caller_locations[0]
+        line = __caller_locations__[0]
         raise "unexpected block" if blk
-        body = nil
+        # raise "SDKJFSKDJF" if _repr.key?("Cls2")
         case name.to_s
         when /\A(.+)=\Z/
           raise "not enough args" if args.empty?
@@ -43,10 +49,9 @@ module RUML
       end
     end
 
-    class Node < ::BasicObject
+    class Base < ::BasicObject
       include Repr
       attr_reader :_repr, :_blk, :_line_
-      ATTRS = %i[meta type name args].freeze
 
       def initialize h, &blk
         @_repr = h
@@ -61,6 +66,16 @@ module RUML
         return super() if detail
         "<#{__class__}:#{object_id} #{_desc_}>"
       end
+      def _desc_
+        ""
+      end
+    end
+
+    class Node < Base
+      ATTRS = %i[meta type name args].freeze
+
+      def _ ; @_ ||= Base.new({}) ; end
+
       def _desc_
         @_desc_ ||= ATTRS.map do |name|
           "#{name}=#{_repr[name].inspect}"
@@ -90,9 +105,28 @@ module RUML
 
       def _find *names
         names = names[0].to_s.split("::") if ::String === names[0]
-        names.inject(self) do | node, name |
+        base = self
+        if names[0] == ""
+          base = _root
+          names.shift
+        end
+        names.inject(base) do | node, name |
+          return unless node
           node.ownedElement.find{|c| c.name == name.to_s}
         end
+      end
+
+      def _isClassMethod
+        meta == :method && args.include?(:class)
+      end
+
+      def _isAbstract
+        meta == :class && !! isAbstract
+        # while node
+        #   return true if node.meta == :class && node.isAbstract
+        #   node = node.namespace
+        # end
+        # false
       end
     end
 

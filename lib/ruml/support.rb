@@ -11,7 +11,7 @@ module Support
 
   module Uninstantiable
     def self.included base
-      super
+      # super
       base.extend(ModuleMethods)
       base.include(InstanceMethods)
       # !!!
@@ -29,7 +29,7 @@ module Support
 
   module Instantiable
     def self.included base
-      super
+      # super
       base.extend(ModuleMethods)
       base.include(InstanceMethods)
       # !!!
@@ -52,7 +52,7 @@ module Support
           end
         end
         if block_given?
-          instance_eval &blk
+          instance_eval(&blk)
         end
         self
       end
@@ -253,8 +253,9 @@ RUBY
     end
 
 
-    def _generate_association name1, type1, multiplicity1, opts1,
-                     name2, type2, multiplicity2, opts2 = nil
+    def _generate_association \
+      name1, type1, multiplicity1, opts1,
+      name2, type2, multiplicity2, opts2 = nil
 =begin
       $stderr.puts \
 "  # association #{name1.inspect}, #{type1.inspect}, #{multiplicity1.inspect}, #{opts1.inspect},
