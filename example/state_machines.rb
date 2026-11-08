@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'ruml/support'
+require 'rmof/runtime'
 require 'ruml/builder'
 
 module MyTest
@@ -55,4 +55,3 @@ module MyTest
   end.compile(:target => self, :verbose => true)
 
 end
-

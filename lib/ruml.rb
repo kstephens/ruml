@@ -7,5 +7,5 @@ module RUML
   EMPTY_String = ''.freeze
 end # RUML
 
-require 'ruml/support'
+require 'rmof/runtime'
 require 'ruml/extensions'

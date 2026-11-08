@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'ruml/support'
+require 'rmof/runtime'
 require 'ruml/builder'
 
 module RUML
@@ -80,7 +80,9 @@ module RUML
           end
         end # PrimitiveTypes
       end
-    end._compile(language: :ruby) # Builder.new
+    end
+    .tap{|b| ::RUML::AST::Printer.new().call(b.root)}
+    ._compile(language: :ruby)
   end
 end
 

@@ -123,7 +123,7 @@ module RMOF
         parse_doc(@dom)
         @phase = :resolve
         parse_doc(@dom)
-        binding.pry
+        # binding.pry
         self
       end
 

@@ -1,11 +1,18 @@
 # frozen_string_literal: true
 
+require 'rmof/context'
+
 module RUML
-
-  # Understands a small DSL for UML modeled in subset of UML Substructure.
   module AST
-
+    def self.copy_method(dst,dst_name, src_module, src_name = dst_name)
+      dst.define_method(dst_name, src_module.instance_method(src_name))
+    end
     module Repr
+      AST.copy_method(self, :__object_id__, ::Object, :object_id)
+      AST.copy_method(self, :__class__, ::Kernel, :class)
+      AST.copy_method(self, :__caller_locations__, ::Kernel, :caller_locations)
+      AST.copy_method(self, :__raise__, ::Kernel, :raise)
+
       def [] n
         raise "#{n}" unless ::Symbol == n
         _repr[n]
@@ -14,12 +21,7 @@ module RUML
         raise "#{n}" unless ::Symbol == n
         _repr[n] = v
       end
-      def __class__
-        ::Object.instance_method(:class).bind(self).call
-      end
-      def __caller_locations__
-        ::Object.instance_method(:caller_locations).bind(self).call
-      end
+
       def method_missing name, *args, &blk
         name = name.to_sym
         line = __caller_locations__[0]
@@ -53,6 +55,9 @@ module RUML
       include Repr
       attr_reader :_repr, :_blk, :_line_
 
+      AST.copy_method(self, :hash, ::Object)
+      AST.copy_method(self, :eql?, ::Object)
+
       def initialize h, &blk
         @_repr = h
         @_blk = blk
@@ -61,10 +66,9 @@ module RUML
       def self.[] *args; new(*args); end
       def nil? ; false ; end
       def to_h ; @_repr ; end
-      def method ; @_repr[:method] ; end
       def inspect detail=false
         return super() if detail
-        "<#{__class__}:#{object_id} #{_desc_}>"
+        "<#{__class__}:#{__object_id__} #{_desc_}>"
       end
       def _desc_
         ""
@@ -72,12 +76,16 @@ module RUML
     end
 
     class Meta < Base
-      ATTRS = %i[meta type name args].freeze
+      ATTRS = %i[meta name args].freeze
 
       def _desc_
         @_desc_ ||= ATTRS.map do |name|
           "#{name}=#{_repr[name].inspect}"
         end.join(' ').freeze
+      end
+
+      def to_s
+        "#{node._.meta} #{args.map(&:inspect).join(", ")}"
       end
 
       def namespace_path
@@ -101,6 +109,19 @@ module RUML
         node
       end
 
+      def args_named(args, *names)
+        names.each_with_index do | name, i |
+          node[name] = args[i]
+        end
+      end
+
+      def args_opts(args)
+        opts = args[-1]
+        if ::Hash === opts
+          @_repr.update(opts)
+        end
+      end
+
       def find *args # -> Node
         names = convert_path(args)
         pp(args: args, name: names)
@@ -108,9 +129,11 @@ module RUML
         if names[0] == ""
           base = root
           names.shift
+        else
+          base = node
         end
         names.inject(base) do | node, name |
-          pp(node: node, name: name)
+          # pp(node: node, name: name)
           found = node._.ownedElement_by_name(name)
           return unless found
           node = found
@@ -119,9 +142,9 @@ module RUML
 
       def convert_path args
         names = []
-        while args
-          arg = args.shift
+        while arg = args.shift
           case arg
+          when nil
           when ::String, ::Symbol
             names.concat(arg.to_s.split("::"))
           when ::Array
@@ -129,7 +152,7 @@ module RUML
           when Node
             names.concat(namespace_path(arg).map(&:name))
           else
-            raise ArgumentError, "convert_path : unexpected #{arg.inspect}"
+            __raise__ ::ArgumentError, "convert_path : unexpected #{arg.inspect}"
           end
         end
         names
@@ -141,7 +164,7 @@ module RUML
       end
 
       def isClassMethod
-        meta == :method && args.include?(:class)
+        meta == :operation && args.include?(:class)
       end
 
       def isAbstract
@@ -154,10 +177,36 @@ module RUML
 
       ATTRS = %i[name].freeze
 
+      AST.copy_method(self, :eql?, ::Object)
       def _desc_
         @_desc_ ||= (ATTRS.map do |name|
           "#{name}=#{self.__send__(name).inspect}"
         end.join(' ') + " " + _._desc_).freeze
+      end
+    end
+
+    class Printer
+      def initialize opts = {}
+        @out = opts[:out] || $stdout
+        @context = ::RMOF::Context.new(:printer)
+      end
+
+      def call node
+        walk node
+      end
+
+      def walk node
+        @context.with(node) do
+          self << "  " * @context.depth << node._.to_s << "\n"
+          node._.node_children.each do | child |
+            walk child
+          end
+        end
+      end
+
+      def << x
+        @out << x.to_s
+        self
       end
     end
 
@@ -189,7 +238,7 @@ module RUML
         __coerce__(@_repr[i],  @_path + [i])
       end
 
-      def responds_to? name
+      def respond_to? name
         ::Hash == @_repr && @_repr.key?(name)
       end
 

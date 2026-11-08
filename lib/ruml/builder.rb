@@ -1,85 +1,183 @@
 # frozen_string_literal: true
 
 require 'ruml'
-require 'ruml/support'
+require 'rmof/runtime'
 require 'ruml/compiler'
 require 'ruml/navigable'
 require 'ruml/ast'
 require 'ruml/logging'
+require 'rmof/context'
 
 module RUML
 
   # Understands a small DSL for UML modeled in subset of UML Substructure.
   class Builder
-    attr_reader :created, :root, :namespace
+    include Logging
+    attr_reader :created, :root, :contexts
 
     include AST::Repr, Logging
-    alias_method :_repr, :namespace
+    def _repr ; @contexts.node ; end
 
     def initialize opts = nil, &blk
       opts ||= { } # EMPTY_HASH
       @opts = opts
       @_log_verbose = true # @opts[:verbose]
       @created = [ ]
-      @root = @opts[:root] || _make_node(:root)
-      # !!! use Traverser
-      @namespace = @root
-      @namespace_stack = [ ]
-      @result = instance_eval(&blk) if block_given?
-    end
-
-    def inspect detail=false
-      return super() if detail
-      "#<#{self.class} ...>"
-    end
-
-    def _log msg = nil
-      if @verbose
-        msg ||= yield if block_given?
-        _log { "#{self.class}#{'  ' * @namespace_stack.size} #{msg}" }
+      @contexts = ::RMOF::Contexts.new
+      @root = @opts[:root] || _build(:root, [])
+      @root.ownedElement = []
+      if block_given?
+        _with(@root) do
+          _with(@root, :namespace) do
+            @result = instance_eval(&blk)
+          end
+        end
       end
-    end
-
-    def _compile(opts = { })
-      opts = @opts.merge(opts)
-      c = Compiler.new(opts)
-      c.run(@root)
-      c
     end
 
     def self.collector *names, &blk
       source_location = [__FILE__, __LINE__ - 1]
       names.each do |meta|
+        meta = meta.to_sym
         raise "collector : #{meta} : unexpected block" if blk
         expr = <<"RUBY"
 def #{meta} *args, &blk
-  _make_node(:#{meta}, *args, &blk)
+  _build(:#{meta}, args, blk)
 end
 RUBY
         class_eval(expr, *source_location)
       end
     end
 
-    def _make_node meta, *args, &blk
-      _log { "#{meta} \#{args.inspect} \#{blk && '&blk'}" }
-      name = args[0]&.to_s # The root node has no name.
+    collector :import, :stereotype, :association, :constant
+
+    def package *args, &blk
+      # binding.pry
+      _build(:package, args) do | node |
+        _namespace(node,&blk)
+      end
+    end
+
+    def class_ *args, &blk
+      namespace = @contexts.namespace
+      _build(:class, args) do | node |
+        node.namespace = namespace
+        node.superClass = [] # : Class[*] #
+        supers = args[1..-1]
+        supers.map(&:to_s).each do | name |
+          node.superClass << (node.namespace._.find(name) or name)
+        end
+        _with(node, :classifier) do
+          node.isAbstract = false
+          node.ownedAttribute = []
+          node.ownedOperation = []
+          node.generalization = []
+          _namespace(node, &blk)
+        end
+      end
+    end
+
+    def superClass *names
+      class_ = @contexts.class
+      names.each do | name |
+        superClass = class_.namespace._.find(name.to_s)
+        cls.superClass << superClass
+      end
+      binding.pry
+    end
+
+    def generalization *args
+      specific = @contexts.classifier
+      args.each do | name |
+        name = name.to_s
+        gen = _build(:generalization, [])
+        general = specific.namespace._.find(name)
+        # if general is not found, yet, just store the name:
+        gen.general = general || name
+        gen.specific = specific
+        specific.generalization << gen
+        general.generalization << gen if general
+        # binding.pry
+      end
+    end
+
+    def property *args
+      _build(:property, args) do | node |
+        node.multiplicity = 1
+        node.aggregation = :none # : AggregationKind = none
+        node.default    ||= []  # : String [0..]
+        node.isComposite = false # : Boolean
+        node.isDerived = false # : Boolean = false
+        node._.args_named(args, :name, :type, :multiplicity)
+        node.association ||= []
+        node.owningAssociation ||= []
+        node.opposite ||= []
+        node.class = _current(:class)
+        node.class.ownedAttribute << node
+      end
+    end
+
+    def operation *args, &blk
+      _build(:operation, args) do | node |
+        node._.blk = blk
+        node.class = _current(:class)
+        node.class.ownedOperation << node
+        node.parameter = []
+        _namespace(node) do
+          node.parameter = blk.parameters.map do |(_kind, name)|
+            param = _build(:parameter, [name, nil])
+            param.name = name
+            param.type = nil
+          end
+        end
+      end
+    end
+    alias_method :method, :operation
+
+    def _namespace node, &blk
+      node.namespace = _current(:namespace)
+      (node.namespace.ownedElement ||= []) << node
+      node.owner = node.namespace
+      _with(node, :namespace, &blk)
+    end
+
+    #####################################
+
+    def _build meta, args, opts=nil, blk=nil
+      _args = args.dup
+      blk ||= _args.pop if ::Proc === _args[-1]
+      opts ||= _args.pop if ::Hash === _args[-1]
+      name = _name(_args[0])
       node = ::RUML::AST::Node[
         name: name,
-        namespace: @namespace,
-        ownedElement: [],
-        owner: @namespace,
       ]
+      node_parent = _current(:node)
+      node_parent._.node_children << node if node_parent
       node._.to_h.update(
         meta: meta,
-        type: meta,
         name: name,
         args: args,
+        opts: opts&.dup || {},
         blk: blk,
+        node_parent: node_parent,
+        node_children: [],
       )
-
-      (@namespace[name] ||= [ ]).push(node).uniq! if @namespace
       @created << node
+      if block_given?
+        @contexts.node(node) do
+          @contexts[meta].with(node) do
+            yield node
+          end
+        end
+      end
       node
+    end
+
+    def _name arg
+      case arg
+      when ::String, ::Symbol then arg.to_s
+      when AST::Node        then arg.name
+      end
     end
 
     def _desc node
@@ -87,69 +185,30 @@ RUBY
       "#{self.class} #{node.inspect} @ #{path_str}"
     end
 
-    collector :import, :stereotype, :property, :association, :constant, :parameter, :generalization
-
-    def package name, *args, &blk
-      _namespace :package, name, args, &blk
+    def _current(name)
+      @contexts[name].current
     end
 
-    def class_ name, *args, &blk
-      _namespace :class, name, args, &blk
+    def _with(node, name=nil, &blk)
+      name ||= node._.meta
+      context = @contexts[name]
+      # $stderr.puts("#{'  ' * context.depth} #{name} | #{node.inspect}}")
+      context.with(node, &blk)
     end
 
-    def method name, *args, &blk
-      _namespace(:method, name, args) do | node |
-        node.blk = blk
-        # binding.pry
-        node.parameter = blk.parameters.map do |(kind, name)|
-          parameter name
-        end
-      end
+    def _compile(opts = { })
+      opts = @opts.merge(opts)
+      c = Compiler.new(opts)
+      # binding.pry
+      c.run(@root)
+      c
     end
 
-    def _namespace type, name, args, instance_blk=nil, &inner_blk
-      name = name.to_s.sub(/\A_/, '').to_sym
-      raise "@namespace is nil" if @namespace.nil?
+    #####################################
 
-      node = _make_node(type, name, *args, &instance_blk)
-      msg = "#{self.class}._namespace : #{_desc(node)}"
-      puts(msg)
-      _log { msg }
-
-      @created << node
-      (@namespace.ownedElement ||= []) << node
-      @namespace_stack.push @namespace
-      begin
-        @namespace = node
-        yield node if inner_blk
-      ensure
-        @namespace = @namespace_stack.pop
-      end
-
-      _log { "}" }
-
-      node
+    def inspect detail=false
+      return super() if detail
+      "#<#{self.class} ...>"
     end
-
-    def x_method_missing sel, *args, &blk
-      sel_s = sel.to_s
-      case sel_s
-      when /\A([a-z0-9_]+)\Z/i
-        case args.size
-        when 0
-          return @namespace[sel]
-        when 1
-          return @namespace[sel] = args.first
-        end
-      when /\A([a-z0-9_]+)=\Z/i
-        case args.size
-        when 1
-          return @namespace[$1.to_sym] = args.first
-        end
-      end
-      super
-    end
-
-  end # Builder
-end # RUML
-
+  end
+end

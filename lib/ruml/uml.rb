@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'ruml/support'
+require 'rmof/runtime'
 
 raise "SDFSDF"
 module RUML
@@ -9,7 +9,7 @@ module UML
   module Core
     module PrimitiveTypes
       class Boolean
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
         stereotype :primitive
 
         def self.coerce x
@@ -31,7 +31,7 @@ module UML
       end
 
       class String
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
         stereotype :primitive
 
         def self.coerce x
@@ -40,7 +40,7 @@ module UML
       end
 
       class Integer
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
         stereotype :primitive
 
         def self.coerce x
@@ -49,7 +49,7 @@ module UML
       end
 
       class UnlimitedNatural
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
         stereotype :primitive
 
         INFINITY = 10**20
@@ -174,14 +174,14 @@ module UML
         end
 
         class OpaqueExpression
-          include RUML::Support::Instantiable
+          include RMOF::Runtime::Instantiable
           include ValueSpecification
           property :body, String, :*, { :ordered => true }
           property :language, String, :*, { :ordered => true }
         end
 
         class Expression
-          include RUML::Support::Instantiable
+          include RMOF::Runtime::Instantiable
           include ValueSpecification
           property :symbol, String
         end
@@ -321,13 +321,13 @@ module UML
       Abstractions::Multiplicities
 
       class Comment
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
 
         include Abstractions::Comments::Comment
       end
 
       class Class
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
 
         include Type
 
@@ -335,7 +335,7 @@ module UML
       end
 
       class Property
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
 
         include TypedElement
         include MultiplicityElement
@@ -348,14 +348,14 @@ module UML
 
 
       class Operation
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
 
         include TypedElement
         include MultiplicityElement
       end
 
       class Parameter
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
 
         include TypedElement
         include MultiplicityElement
@@ -366,25 +366,25 @@ module UML
       end
 
       class PrimitiveType
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
 
         include DataType
       end
 
       class Enumeration
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
 
         include DataType
       end
 
       class EnumerationLiteral
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
 
         include NamedElement
       end
 
       class Package
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
 
         include NamedElement
       end
@@ -441,7 +441,7 @@ module UML
       end
 
       class Package
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
 
         include Namespaces::Namespace
         include PackageableElement
@@ -460,13 +460,13 @@ module UML
       :nestedPackage,    Package, :*,   { :subsets => :packagedElement }
 
       class Association
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
 
         include Namespaces::NamedElement
       end
 
       class AssociationEnd
-        include RUML::Support::Instantiable
+        include RMOF::Runtime::Instantiable
 
         include Namespaces::NamedElement
       end
@@ -480,4 +480,3 @@ module UML
 end # UML
 
 end # RUML
-
