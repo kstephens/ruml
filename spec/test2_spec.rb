@@ -10,35 +10,32 @@ describe "Builder" do
   b = RUML::Builder.new(target: MM) do | b |
     package :P1 do
       package :P2 do
-        import :Types
-
         class_ :C1 do
-          property :x, :String, 0..1
-          method :to_s do
-            "C1.x=#{x.inspect}"
+          property :x, String, 0..1
+          operation :to_s do
+            "#{self.class} : C1.x=#{x.inspect}"
           end
         end
 
         class_ :C2, :C1 do
           isAbstract true
-          # generalization :C1
-          property :y, :Integer, 1..3
-          method :to_s do
-            super() + "; " + (y * ', ')
+          property :y, Integer, 1..3
+          operation :to_s do
+            "#{self.class} : #{super} : C2.y=#{y.inspect}"
           end
         end
 
         class_ :C3 do
-          property :z, :Integer, 1..3
-          method :to_s do
-            super()) + "; " + (y * ', ')
+          property :z, Integer, 1..3
+          operation :to_s do
+            "#{self.class} : C3.z=#{z.inspect}"
           end
         end
 
         class_ :C4 do
           generalization :C3
-          method :to_s do
-            super() + ": #{z.inspect}"
+          operation :to_s do
+            "#{self.class} : #{super()} : C4"
           end
         end
 
@@ -80,13 +77,14 @@ describe "Builder" do
   expect(c4.ancestors).to include(c4::RUML_InstanceBehavior)
 
   o1 = c1.new(:x => "o1", :y => [ 1, 2, 3 ])
+
   expect { c2.new(:x => "foobar", :y => [ 1, 2, 3 ]) }.to raise_error(RMOF::Runtime::UninstantiatableError)
 
-  o3 = c3.new(x: "c3.x", z: "c3.z")
-  expect(o3.to_s).to eq('x = "foobar"; 1, 2, 3')
+  o3 = c3.new(x: "c3.x", z: [2, 3])
+  expect(o3.to_s).to eq("MM::P1::P2::C3 : C3.z=[2, 3]")
 
-  o4 = c4.new(z: "c4.z")
-  expect(o4.to_s).to eq('x = "foobar"; 1, 2, 3')
+  o4 = c4.new(z: [2, 3])
+  expect(o4.to_s).to eq("MM::P1::P2::C4 : MM::P1::P2::C4 : C3.z=[2, 3] : C4")
 
   end
 end

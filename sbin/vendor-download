@@ -15,8 +15,31 @@ require 'uri'
 require 'pathname'
 require 'pry'
 require 'json'
+require 'time'
 
 class Main
+  def omg_specs
+    %w[
+      UML/2.5.1
+      UML/2.4.1
+      MOF/2.5.1
+      MOF/2.4.2
+      MOF/2.0
+      XMI/2.5.1
+      XMI/2.4.2
+      XMI/2.1.1
+      XMI/2.0
+      OCL/2.4
+      OCL/2.3.1
+      OCL/2.2
+      OCL/2.0
+      IDL/4.2
+      IDL/4.1
+      IDL/4.0
+      IDL/3.5
+    ]
+  end
+
   attr_accessor :progname, :project_dir, :dst_dir
 
   def initialize
@@ -25,39 +48,88 @@ class Main
     @dst_dir = project_dir / "vendor"
   end
 
-  def download(url)
+  def call argv
+    result = {
+      started_at: Time.now.iso8601(6),
+    }
+    result.update(
+      omg_specs: omg_specs.map do |spec|
+        spec_url = "https://www.omg.org/spec/#{spec}"
+        urls = omg_spec_scrape(spec_url)
+        downloads = urls.map do |url|
+          omg_spec_download(url)
+        end
+        [spec,
+          {
+            spec: spec,
+            spec_url: spec_url,
+            urls: urls,
+            downloads: downloads,
+          }
+        ]
+      end.to_h
+    )
+    result.update(
+      finished_at: Time.now.iso8601(6),
+    )
+
+    json = JSON.pretty_generate(result)
+    puts(json)
+    File.write("#{dst_dir}/#{progname}.json", json)
+  end
+
+  def omg_spec_scrape url
+    rx = %r{href="(https://www\.omg\.org/spec/[^"]+(\.xmi|\.ocl|\.zip|\.xsd|\.cmof|\.emof|/PDF))"}
+    urls = []
+    Faraday.get(url).body.scan(rx) do | m |
+      urls << m[0]
+    end
+    urls.sort!.uniq!
+  end
+
+  def omg_spec_download(url)
     url = URI.parse(url)
     src_path = Pathname.new(url.host + url.path)
+    # e.g;
+    #   src_path = "www.omg.org/spec/XMI/2.4.2/PDF"
+    #   name, version, _PDF = "XMI", "2.4.2", "/PDF"
     name, version, _PDF = $1, $2, $3 if %r{/([^/]+)/([^/]+)(/PDF)?$}.match(src_path.to_s)
+    result = {
+      url: url,
+      src_path: src_path.to_s,
+    }
     response = Faraday.get(url)
     raise "#{url} #{response.status}" if ! response.success?
+    result.update(
+      response: {
+        status: response.status,
+        headers: response.headers.to_h,
+      },
+      size: response.body.size,
+    )
+
     content_type = response.headers["content-type"]
     content_disposition = Mail::ContentDispositionField.new(response.headers["content-disposition"])
-    filename = Pathname.new(content_disposition.filename || "")
+    content_disposition_filename = Pathname.new(content_disposition.filename || "")
+
     dst_path = dst_dir / src_path
     dst_links = []
     if (
       src_path.extname == "" &&
       _PDF &&
-      filename.extname == ".pdf" &&
+      content_disposition_filename.extname == ".pdf" &&
       content_type == 'application/pdf'
     )
-      dst_path = dst_dir / src_path / filename
-      dst_links << dst_dir / src_path / "#{name}-#{version}-#{filename}"
-      dst_links << dst_dir / src_path / "#{name}-#{version}#{filename.extname}"
+      dst_path = dst_dir / src_path / content_disposition_filename
+      dst_links << dst_dir / src_path / "#{name}-#{version}-#{content_disposition_filename}"
+      dst_links << dst_dir / src_path / "#{name}-#{version}#{content_disposition_filename.extname}"
     end
 
-    result = {
-      url: url,
-      response: {
-        status: response.status,
-        headers: response.headers.to_h,
-        filename: filename.to_s,
-      },
-      src_path: src_path.to_s,
+    result.update(
+      content_disposition_filename: content_disposition_filename.to_s,
       dst_path: dst_path.relative_path_from(dst_dir).to_s,
       dst_links: dst_links.map{|p| p.relative_path_from(dst_dir).to_s},
-    }
+    )
     puts(JSON.pretty_generate(result))
 
     dst_path.parent.mkpath
@@ -70,50 +142,10 @@ class Main
       dst_link.unlink if dst_link.exist?
       File.symlink(dst_target.to_s, dst_link.to_s)
     end
+
     result
   end
 
-  def scrape_omg_spec url
-    rx = %r{href="(https://www\.omg\.org/spec/[^"]+(\.xmi|\.ocl|\.zip|\.xsd|\.cmof|\.emof|/PDF))"}
-    urls = []
-    Faraday.get(url).body.scan(rx) do | m |
-      urls << m[0]
-    end
-    urls.sort!.uniq!
-  end
-
-  def call argv
-    omg_spec_urls = %w[
-      https://www.omg.org/spec/UML/2.5.1
-      https://www.omg.org/spec/UML/2.4.1
-      https://www.omg.org/spec/MOF/2.5.1
-      https://www.omg.org/spec/MOF/2.4.2
-      https://www.omg.org/spec/MOF/2.0
-      https://www.omg.org/spec/XMI/2.5.1
-      https://www.omg.org/spec/XMI/2.4.2
-      https://www.omg.org/spec/XMI/2.1.1
-      https://www.omg.org/spec/XMI/2.0
-      https://www.omg.org/spec/OCL/2.4
-      https://www.omg.org/spec/OCL/2.3.1
-      https://www.omg.org/spec/OCL/2.2
-      https://www.omg.org/spec/OCL/2.0
-      https://www.omg.org/spec/IDL/4.2
-      https://www.omg.org/spec/IDL/4.1
-      https://www.omg.org/spec/IDL/4.0
-      https://www.omg.org/spec/IDL/3.5
-    ]
-    urls = omg_spec_urls.flat_map do | spec_url |
-      scrape_omg_spec(spec_url)
-    end.sort!.uniq!
-
-    result = urls.map do |url|
-      download(url)
-    end
-
-    json = JSON.pretty_generate(result)
-    puts(json)
-    File.write("#{dst_dir}/#{progname}.json", json)
-  end
 end
 Main.new.call(ARGV)
 

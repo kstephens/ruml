@@ -17,13 +17,13 @@ module RUML
     attr_reader :target, :pass
 
     # Outputs:
-    attr_reader :created, :module_to_node
+    attr_reader :created_modules, :module_to_node
 
     def initialize opts = nil, &blk
       opts ||= { } # EMPTY_HASH
       @opts = opts
       self._log_verbose = true # @opts[:verbose]
-      @created = [ ]
+      @created_modules = [ ]
       @target = opts[:target]
       @current = nil
       @current_stack = [ ]
@@ -64,7 +64,6 @@ module RUML
     end
 
     def compile_package node
-      # binding.pry
       node._.superClass_remaining ||= []
       send("compile_namespace_#{pass}", node)
     end
@@ -86,7 +85,7 @@ module RUML
       declaration = "#{kind} #{full_path_str}"
 
       if node._.meta == :class
-        supers = node.superClass.map{|super_| resolve(node.namespace, super_)}
+        supers = node.superClass.map{|super_| lookup_node(node.namespace, super_)}
         if super_ = supers.shift
           declaration << " < #{super_._.full_path_str}"
         end
@@ -107,11 +106,20 @@ module RUML
       lines << "end"
       lines << ""
 
-      target = node_eval(node, lines)
-      node._module = target
-      @module_to_node[target] = node
+      module_ = node_eval(node, lines)
+      node._.ruby_module = module_
+      node._.ruby_module_instance = module_.const_get("RUML_InstanceBehavior")
+      node._.ruby_module_module = module_.const_get("RUML_ModuleBehavior")
+      node._.ruby_include&.each do | m |
+        module_.include(m)
+      end
+      node._.ruby_extend&.each do | m |
+        module_.extend(m)
+      end
       target.const_set(:RUML_COMPILER_NODE, node)
-      @created << target
+
+      @module_to_node[module_] = node
+      @created_modules << module_
 
       _compile_ownedElement(node)
 
@@ -163,20 +171,14 @@ module RUML
     def compile_operation_2 node
       name = node.name.to_sym
       parent = node.namespace
-      expr = parent._.full_path_str.dup
-      if node._.isClassMethod
-        expr << "::RUML_ModuleBehavior"
-      else
-        expr << "::RUML_InstanceBehavior"
-      end
-      target = lookup_module(expr)
-      # binding.pry if node.name == "unbounded"
+      target = node._.isStatic ? parent._.ruby_module_module : parent._.ruby_module_instance
+      # binding.pry if node.name == "unlimited"
       node_define_method(parent, target, name, node._.blk)
     end
 
     def compile_constant_2 node
       name = node.name.to_sym
-      target = node.namespace._.module
+      target = node.namespace._.ruby_module
       return if target.constants.include?(name)
       val = args[1]
       val = target.instance_eval(&node.blk) if node.blk
@@ -186,9 +188,9 @@ module RUML
 
     def compile_import_2 node
       parent = node.namespace
-      dst = node._.module
+      dst = node._.ruby_module
       node.args.flatten.each do | name |
-        src = resolve(parent, name).module
+        src = lookup_node(parent, name).ruby_module
         src.constants.each do | n |
           v = x.const_get(n)
           dst.const_set(n, v)
@@ -203,16 +205,17 @@ module RUML
     end
 
     def compile_property_2 node
-      node.type = node._.find(node.type) or raise "Cannot find type for #{node.inspect}"
+      node.type = lookup_node(node.namespace, node.type)
+      result = @code_generator.generate_property(node)
       # binding.pry
-      @code_generator.generate_property(node)
+      node_module_eval(node, result[:code], node.class._.ruby_module_instance)
     end
 
     def compile_association_2 node
       args = node._.args
       owner = node.namespace
-      args[1] = resolve(owner, args[1])._.full_path_str
-      args[5] = resolve(owner, args[5])._.full_path_str
+      args[1] = lookup_node(owner, args[1])._.full_path_str
+      args[5] = lookup_node(owner, args[5])._.full_path_str
       @code_generator.generate_association(target, *args)
     end
 
@@ -261,6 +264,14 @@ module RUML
       target.define_method(name, &blk)
     end
 
+    def node_module_eval(node, expr, mod)
+      expr = node_code(node, expr)
+      mod.module_eval(expr)
+    rescue => e
+      # binding.pry
+      raise Error, "#{e.inspect} : in \n#{expr}"
+    end
+
     def node_eval(node, expr)
       _log { "node_eval : #{node.inspect}" }
       expr = node_code(node, expr)
@@ -286,27 +297,37 @@ DESC
       expr
     end
 
-    def resolve node, name
-      return @module_to_node[name] if @module_to_node[name]
-      return name if AST::Node === name
-      name = name.to_s
+    def lookup_node node, ident
+      return ident if AST::Node === ident
+      if ::Module === ident and x = @module_to_node[ident]
+        return x
+      end
+      ident = ident.to_s
       while node
-        if found = node._.find(name)
+        if found = node._.find(ident)
           return found
         end
         node = node.namespace
       end
     end
 
-    def lookup_module str
-      path = str.split("::")
-      path.inject(::Object) do | mod, name |
-        mod.const_get(name)
+    def lookup_module ident, fail_if_not_found=false
+      if ::Module === ident
+        ident
+      elsif AST::Node === ident && ident._.ruby_module
+        ident._.ruby_module
+      else
+        path = ident.to_s.split("::")
+        path.inject(::Object) do | mod, name |
+          name = name.to_sym
+          return if fail_if_not_found && ! mod.const_defined?(name)
+          mod.const_get(name)
+        end
       end
     end
 
     def namespace_str path
-      path.map{|node| node.name}.compact.map(&:to_s).join("::")
+      path.map(&:name).compact.map!(&:to_s).join("::")
     end
 
     def _log_prefix ; "pass #{pass}" ; end

@@ -26,6 +26,7 @@ module RUML
       @contexts = ::RMOF::Contexts.new
       @root = @opts[:root] || _build(:root, [])
       @root.ownedElement = []
+      @node_for_module = {}
       if block_given?
         _with(@root) do
           _with(@root, :namespace) do
@@ -51,6 +52,14 @@ RUBY
 
     collector :import, :stereotype, :association, :constant
 
+    # Include a native Ruby Module into a MOF namespace:
+    def include *modules
+      (@contexts.namespace._.ruby_include ||= []).concat(modules).uniq!
+    end
+    def extend *modules
+      (@contexts.namespace._.ruby_extend ||= []).concat(modules).uniq!
+    end
+
     def package *args, &blk
       # binding.pry
       _build(:package, args) do | node |
@@ -62,6 +71,7 @@ RUBY
       namespace = @contexts.namespace
       _build(:class, args) do | node |
         node.namespace = namespace
+        node.ownedElement = []
         node.superClass = [] # : Class[*] #
         supers = args[1..-1]
         supers.map(&:to_s).each do | name |
@@ -83,7 +93,7 @@ RUBY
         superClass = class_.namespace._.find(name.to_s)
         cls.superClass << superClass
       end
-      binding.pry
+      # binding.pry
     end
 
     def generalization *args
@@ -103,32 +113,48 @@ RUBY
 
     def property *args
       _build(:property, args) do | node |
+        node.namespace = _current(:namespace)
+        node.namespace.ownedElement << node
+        node.type = nil # UNTYPED
         node.multiplicity = 1
         node.aggregation = :none # : AggregationKind = none
-        node.default    ||= []  # : String [0..]
+        node.default = []  # : String [0..]
         node.isComposite = false # : Boolean
         node.isDerived = false # : Boolean = false
         node._.args_named(args, :name, :type, :multiplicity)
-        node.association ||= []
-        node.owningAssociation ||= []
-        node.opposite ||= []
+        node.association = []
+        node.owningAssociation = []
+        node.opposite = []
         node.class = _current(:class)
         node.class.ownedAttribute << node
+        node.type = _type_to_node(node.type)
+        # binding.pry
       end
     end
 
     def operation *args, &blk
       _build(:operation, args) do | node |
+        node.namespace = _current(:namespace)
+        node.namespace.ownedElement << node
         node._.blk = blk
         node.class = _current(:class)
         node.class.ownedOperation << node
+        # ??? node.owner = node.class
         node.parameter = []
         _namespace(node) do
           node.parameter = blk.parameters.map do |(_kind, name)|
             param = _build(:parameter, [name, nil])
+            param.operation = node
             param.name = name
-            param.type = nil
+            param.type = nil # Ruby parameters are untyped
+            # ParameterDirectionKind
+            param.direction = :in
           end
+          param = _build(:parameter, ["return", nil])
+          param.operation = node
+          param.name = "return"
+          param.type = nil # Ruby parameters are untyped
+          param.direction = :return
         end
       end
     end
@@ -144,23 +170,30 @@ RUBY
     #####################################
 
     def _build meta, args, opts=nil, blk=nil
+      meta = meta.to_sym
       _args = args.dup
       blk ||= _args.pop if ::Proc === _args[-1]
       opts ||= _args.pop if ::Hash === _args[-1]
       name = _name(_args[0])
       node = ::RUML::AST::Node[
         name: name,
+        stereotype: [],
       ]
       node_parent = _current(:node)
       node_parent._.node_children << node if node_parent
       node._.to_h.update(
         meta: meta,
+        type_name: meta.to_s.capitalize,
         name: name,
         args: args,
         opts: opts&.dup || {},
         blk: blk,
         node_parent: node_parent,
         node_children: [],
+        ruby_native: false,
+        ruby_include: [],
+        ruby_extend: [],
+        ruby_module: nil,
       )
       @created << node
       if block_given?
@@ -171,6 +204,32 @@ RUBY
         end
       end
       node
+    end
+
+    def _type_to_node x
+      case type
+      when nil, AST::Node, Symbol, String
+        x
+      when ::Class
+        @node_for_module[x] ||= begin
+          full_path_str = x.to_s
+          name = full_path_str.split("::")[-1]
+          _build(:class, [name]) do | node |
+            node.ownedElement = []
+            node._._repr.update(
+              parent: nil,
+              ruby_native: true,
+              ruby_module: x,
+              ruby_module_instance: x,
+              ruby_module_module: x.class,
+              node_path_str: full_path_str,
+              full_path_str: full_path_str,
+            )
+          end
+        end
+      else
+        raise "_to_class"
+      end
     end
 
     def _name arg

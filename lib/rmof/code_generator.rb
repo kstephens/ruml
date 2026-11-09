@@ -6,19 +6,33 @@ module RMOF
       @opts = opts.dup
     end
 
+    UNLIMITED = 12345678901234567890
+    STAR = UNLIMITED
+
+    def coerce_number x
+      case x
+      when nil, Integer then x
+      when :*, '*'      then UNLIMITED
+      when String       then Integer(x)
+      end
+    end
+
     def coerce_multiplicity m
-      result = \
+    result = \
       case m
       when nil
-        1
+        1..1
       when Range
         m
       when Integer
         m .. m
       when :*, '*'
-        STAR
+        0..UNLIMITED
       when String
-        eval(m.sub(/\*/, N.to_s))
+        a, b = m.split('..')
+        a = coerce_number(a)
+        b = coerce_number(b)
+        a..b
       else
         raise ArgumentError, "given #{m.inspect}"
       end
@@ -28,12 +42,19 @@ module RMOF
 
     LAMBDA_NIL = lambda { | *args | nil } unless defined? LAMBDA_NIL
 
-    def generate_property node
-      opts = node._.opts ||= {}
-      node.multiplicity = coerce_multiplicity(node.multiplicity)
-      $stderr.puts "#### _generate_property #{node.inspect}" if @verbose
+    def hasStereotype? node, name
+      name = name.to_s
+      node.stereotype&.find{|x| x.name == name}
+    end
 
-      if ype.hasStereotype?(:primitive)
+    def generate_property node
+      $stderr.puts "#### _generate_property #{node.inspect}" if @verbose
+      opts = node._.opts ||= {}
+      name = node.name
+      type = node.type._.full_path_str
+      multiplicity = coerce_multiplicity(node.multiplicity)
+
+      if hasStereotype?(node.type, :primitive)
         coerce = lambda { | msg |
           <<"RUBY"
 __val = __val.nil? ? __val : ::#{type}.coerce(__val)
@@ -44,7 +65,7 @@ RUBY
         coerce = LAMBDA_NIL
         typecheck = lambda { | msg |
           <<"RUBY"
-raise ArgumentError, "#{msg}: expected #{type}" unless __val.nil? || ::#{type} === __val
+raise ::ArgumentError, "#{msg}: expected #{type}" unless __val.nil? || ::#{type} === __val
 RUBY
         }
       end
@@ -52,7 +73,7 @@ RUBY
       typecheck_min = if multiplicity.first == 1
         lambda { | msg |
           <<"RUBY"
-raise ArgumentError, "#{msg}: #{type} [#{multiplicity}]" if __val.nil?
+raise ::ArgumentError, "#{msg}: #{type} [#{multiplicity}]" if __val.nil?
 RUBY
         }
       else
@@ -62,32 +83,32 @@ RUBY
       multiplicity_min = if multiplicity.first > 0
         lambda { | msg, size |
           <<"RUBY"
-raise ArgumentError, "#{msg}: #{type} [#{multiplicity}]" unless #{size} >= #{multiplicity.first}
+raise ::ArgumentError, "#{msg}: #{type} [#{multiplicity}]" unless #{size} >= #{multiplicity.first}
 RUBY
           }
       else
         LAMBDA_NIL
       end
 
-      multiplicity_max = if multiplicity.last != N
+      multiplicity_max = if multiplicity.last != UNLIMITED
         lambda { | msg, size |
           <<"RUBY"
-raise ArgumentError, "#{msg}: #{type} [#{multiplicity}]" unless #{size} <= #{multiplicity.last}
+raise ::ArgumentError, "#{msg}: #{type} [#{multiplicity}]" unless #{size} <= #{multiplicity.last}
 RUBY
           }
       else
         LAMBDA_NIL
       end
 
+      code = "# Property #{name} : #{type} #{node.multiplicity}\n"
       case multiplicity.last
       when 1
-        code = <<"RUBY", __FILE__, __LINE__
-  # Property #{name} : #{type} #{m}
+        code << <<"RUBY"
   def #{name}
     @#{name}
   end
-  def count_#{name}
-    @#{name} ? 1 : 0
+  def #{name}_count
+    @#{name}.nil? ? 0 : 1
   end
   def #{name}= __val
     # coerce
@@ -96,19 +117,19 @@ RUBY
     #{typecheck_min.call("#{name}=")}
     # typecheck
     #{typecheck.call("#{name}=")}
-    clear_#{name}!
+    #{name}_clear!
     @#{name} = __val
   end
-  def clear_#{name}!
+  def #{name}_clear!
     @#{name} = nil
     self
   end
-  def add_#{name}! __val
+  def #{name}_add! __val
     return self if __val.nil?
     # coerce
-    #{coerce.call("add_#{name}!")}
+    #{coerce.call("#{name}_add!")}
     # typecheck
-    #{typecheck.call("add_#{name}!")}
+    #{typecheck.call("#{name}_add!")}
     if @#{name} != __val
       # multiplicity_max
       #{multiplicity_max.call("add_#{name}!", "count_#{name} + 1")}
@@ -116,27 +137,26 @@ RUBY
     end
     self
   end
-  def remove_#{name}! __val
+  def #{name}_remove! __val
     return self if __val.nil?
     # coerce
-    #{coerce.call("remove_#{name}!")}
+    #{coerce.call("#{name}_remove!")}
     # typecheck
-    #{typecheck.call("remove_#{name}!")}
+    #{typecheck.call("#{name}_remove!")}
     if @#{name} == __val
       # multiplicity_min
-      #{multiplicity_min.call("#{name}=", "count_#{name} - 1")}
+      #{multiplicity_min.call("#{name}=", "#{name}_count - 1")}
       @#{name} = nil
     end
     self
   end
 RUBY
       else
-        code = <<"RUBY", __FILE__, __LINE__
-  # Property #{name} : #{type} #{m}
+        code << <<"RUBY"
   def #{name}
     @#{name} ||= [ ]
   end
-  def count_#{name}
+  def #{name}_count
     #{name}.size
   end
   def #{name}= __vals
@@ -144,39 +164,39 @@ RUBY
     #{multiplicity_min.call("#{name}=", "__vals.size")}
     # multiplicity_max
     #{multiplicity_max.call("#{name}=", "__vals.size")}
-    clear_#{name}!
-    __vals.each { | __val | add_#{name}! __val }
+    #{name}_clear!
+    __vals.each { | __val | #{name}_add!(__val) }
   end
-  def clear_#{name}!
+  def #{name}_clear!
     #{name}.clear
     self
   end
-  def add_#{name}! __val
+  def #{name}_add! __val
     return self if __val.nil?
     # coerce
-    #{coerce.call("add_#{name}!")}
+    #{coerce.call("#{name}_add!")}
     # typecheck
-    #{typecheck.call("add_#{name}!")}
+    #{typecheck.call("#{name}_add!")}
     # multiplicity_max
-    #{multiplicity_max.call("add_#{name}!", "count_#{name} + 1")}
+    #{multiplicity_max.call("#{name}_add!", "#{name}_count + 1")}
     #{name}.push(__val)
     self
   end
-  def remove_#{name} __val
+  def #{name}_remove! __val
     return self if __val.nil?
     # coerce
-    #{coerce.call("remove_#{name}!")}
+    #{coerce.call("#{name}_remove!")}
     # typecheck
-    #{typecheck.call("remove_#{name}!")}
+    #{typecheck.call("#{name}_remove!")}
     # multiplicity_min
-    #{multiplicity_min.call("#{name}=", "count_#{name} - 1")}
+    #{multiplicity_min.call("#{name}=", "#{name}_count - 1")}
     #{name}.delete(__val)
     self
   end
 RUBY
       end
       {
-        cls: cls,
+        node: node,
         name: name,
         type: type,
         multiplicity: multiplicity,

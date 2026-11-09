@@ -7,6 +7,7 @@ module RUML
     def self.copy_method(dst,dst_name, src_module, src_name = dst_name)
       dst.define_method(dst_name, src_module.instance_method(src_name))
     end
+
     module Repr
       AST.copy_method(self, :__object_id__, ::Object, :object_id)
       AST.copy_method(self, :__class__, ::Kernel, :class)
@@ -28,6 +29,9 @@ module RUML
         raise "unexpected block" if blk
         # raise "SDKJFSKDJF" if _repr.key?("Cls2")
         case name.to_s
+        when /\?\Z/
+          $stderr.puts("method_missing #{name.inspect} #{args.inspect}")
+          super
         when /\A(.+)=\Z/
           raise "not enough args" if args.empty?
           key = $1.to_sym
@@ -45,7 +49,7 @@ module RUML
         self.__class__.define_method(name, &body)
         self.__send__(name, *args)
       rescue => e
-        exc = ArgumentError.new("#{self.class} : #{name} : #{e.inspect}")
+        exc = ::ArgumentError.new("#{self.class} : #{name} : #{e.inspect}")
         exc.set_backtrace([line.to_s, *e.backtrace])
         raise exc
       end
@@ -75,6 +79,12 @@ module RUML
       end
     end
 
+    class Node < Base
+      def _ ; @_ ||= Meta.new({node: self}) ; end
+      AST.copy_method(self, :eql?, ::Object)
+      def _desc_; "#{_._desc_} #{@_repr.keys}"; end
+    end
+
     class Meta < Base
       ATTRS = %i[meta name args].freeze
 
@@ -88,6 +98,9 @@ module RUML
         "#{node._.meta} #{args.map(&:inspect).join(", ")}"
       end
 
+      def node_keys
+        node._repr.keys
+      end
       def namespace_path
         node, result = self.node, []
         while node
@@ -110,8 +123,8 @@ module RUML
       end
 
       def args_named(args, *names)
-        names.each_with_index do | name, i |
-          node[name] = args[i]
+        args.zip(names) do | (arg, name)|
+          node[name] = arg
         end
       end
 
@@ -123,7 +136,7 @@ module RUML
       end
 
       def find *args # -> Node
-        names = convert_path(args)
+        names = convert_to_path(args)
         pp(args: args, name: names)
         base = node
         if names[0] == ""
@@ -140,7 +153,7 @@ module RUML
         end
       end
 
-      def convert_path args
+      def convert_to_path args
         names = []
         while arg = args.shift
           case arg
@@ -150,9 +163,9 @@ module RUML
           when ::Array
             args.unshift(arg)
           when Node
-            names.concat(namespace_path(arg).map(&:name))
+            names.concat(arg._.namespace_path.map(&:name))
           else
-            __raise__ ::ArgumentError, "convert_path : unexpected #{arg.inspect}"
+            __raise__ ::ArgumentError, "convert_to_path : unexpected #{arg.inspect}"
           end
         end
         names
@@ -163,25 +176,12 @@ module RUML
         node.ownedElement.find{|c| c.name == name}
       end
 
-      def isClassMethod
-        meta == :operation && args.include?(:class)
+      def isStatic
+        meta == :operation && args.include?(:static)
       end
 
       def isAbstract
         meta == :class && !! node.isAbstract
-      end
-    end
-
-    class Node < Base
-      def _ ; @_ ||= Meta.new({node: self}) ; end
-
-      ATTRS = %i[name].freeze
-
-      AST.copy_method(self, :eql?, ::Object)
-      def _desc_
-        @_desc_ ||= (ATTRS.map do |name|
-          "#{name}=#{self.__send__(name).inspect}"
-        end.join(' ') + " " + _._desc_).freeze
       end
     end
 

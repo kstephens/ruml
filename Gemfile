@@ -9,11 +9,12 @@ gem "logger", "~> 1.7"
 gem "mail", "~> 2.9"
 gem "multi_json", "~> 1.21"
 
-
-gem "pry", "~> 0.16.0"
-gem "pry-byebug", "~> 3.12"
-gem "pry-stackexplorer", "~> 0.5.1"
-gem "pry-stack_explorer", "~> 0.6.3"
-gem "rake", "~> 13.4"
-gem "rspec", "~> 3.13"
-
+group :development do
+  gem "rake", "~> 13.4"
+  gem "rspec", "~> 3.13"
+  gem "guard-rspec", "~> 4.7"
+  gem "pry", "~> 0.16.0"
+  gem "pry-byebug", "~> 3.12"
+  gem "pry-stackexplorer", "~> 0.5.1"
+  gem "pry-stack_explorer", "~> 0.6.3"
+end

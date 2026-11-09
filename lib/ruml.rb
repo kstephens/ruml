@@ -5,7 +5,8 @@ module RUML
   EMPTY_Array = [ ].freeze
   EMPTY_Hash = { }.freeze
   EMPTY_String = ''.freeze
-end # RUML
+  class Error < StandardError ; end
+end
 
 require 'rmof/runtime'
 require 'ruml/extensions'

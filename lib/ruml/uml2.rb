@@ -4,7 +4,16 @@ require 'rmof/runtime'
 require 'ruml/builder'
 
 module RUML
-  UNBOUNDED_VALUE = 12345678901234567890
+  UNLIMITED = 12345678901234567890
+
+  module PrimitiveTypes
+    def initialize repr
+      @_repr_ = repr
+    end
+    def self.to_native type, value
+      type._coerce_to_native(value)
+    end
+  end
 
   module UML2
 
@@ -12,9 +21,10 @@ module RUML
       package :Core do
         package :PrimitiveTypes do
           class_ :Boolean do
+            include PrimitiveTypes
             stereotype :primitive
 
-            coerceions = {
+            coercions = {
               nil => false,
               0 => false,
               1 => true,
@@ -28,45 +38,52 @@ module RUML
               '0'     => false,
             }
 
-            method :coerce, :class do | x |
+            operation :_coerce_to_native, :class do | x |
               case x
-              when Integer then x != 0
+              when ::Integer, ::Float then x != 0
               else
-                val = coerceions[x]
+                val = coercions[x]
                 raise ArgumentError, "coerce : #{self} : given #{x.inspect}" if val.nil?
               end
             end
           end # Boolean
 
           class_ :String do
+            include PrimitiveTypes
             stereotype :primitive
 
-            method :coerce, :class do | x |
+            operation :to_i do @_repr_.to_i end
+
+              operation :_coerce_to_native, :class do | x |
               x.to_s
             end
           end # String
 
           class_ :Integer do
+            include PrimitiveTypes
             stereotype :primitive
 
-            method :coerce, :class do | x |
+            operation :initialize do | rep |
+              @rep = rep
+            end
+
+            operation :to_i do @_repr_.to_i end
+
+            operation :_coerce_to_native, :class do | x |
               x.to_i
             end
           end # Integer
 
           class_ :UnlimitedNatural, :Integer do
+            include PrimitiveTypes
             stereotype :primitive
 
-            method :initialize do | rep |
-              @rep = rep
-            end
+            operation :to_i do @_repr_.to_i end
 
-            method :to_i do @rep.to_i end
-
-            method :coerce, :class do | x |
+            operation :_coerce_to_native, :class do | x |
               case x
               when :*, '*'
-                unbounded
+                UNLIMITED
               else
                 i = x.to_i
                 raise ArgumentError, "not >= 0" unless i >= 0
@@ -74,8 +91,8 @@ module RUML
               end
             end
 
-            method :unbounded, :class do
-              @unbounded ||= new(UNBOUNDED_VALUE)
+            operation :unlimited, :class do
+              @unlimited ||= new(UNLIMITED)
             end
           end
         end # PrimitiveTypes
