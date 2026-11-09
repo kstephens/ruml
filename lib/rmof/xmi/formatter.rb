@@ -25,19 +25,23 @@ module RMOF
             indent
             write name
             write " "
-            emit(obj)
+            if @max_depth && @depth >= @max_depth
+              write " (... #{obj.size} items)\n"
+            else
+              emit(obj)
+            end
             @depth -= 1
           end
-          binding.pry if name == "defaultValue" && !obj.value.nil?
         end
       end
 
       def emit_basic(obj)
         # BasicObject does not have a #class method.
-        cls = obj._xmi_class
+        cls = obj.__class__
+        cls_name = cls.name.sub(%r{^#<Module:[^>]+>::}, '')
         id = "#{obj.__id__}:#{id.inspect}"
         if @seen[obj.__id__]
-          write "#{cls.name} @#{id}\n"
+          write "#{cls_name} @#{id}\n"
           return false
         end
         @seen[obj.__id__] = obj
@@ -50,7 +54,7 @@ module RMOF
       end
 
       def indent
-        @out.write "  " * @depth
+        @out.write ". " * @depth
       end
       def write(s)
         @out.write s

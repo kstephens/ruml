@@ -19,142 +19,178 @@ module RMOF
         @namespaces = {}
         @object_id = 0
         @id_to_object = {}
+        @object_id_to_object = {}
+        @to_class = {}
+        @classes = []
+        @objects = []
+        @get_class = {}
+        @root = Module.new
+        logger.level = Logger::WARN
       end
 
-      def make_instance(namespace, name, properties, id=nil)
-        if id and other = @id_to_object[id]
-          puts "found #{id} : #{other}"
-          return other
+      def make_instance(xmlns, name, properties=nil, id=nil)
+        if id and obj = @id_to_object[id]
+          logger.debug "make_instance(#{xmlns.inspect} #{name.inspect}) : found #{id} : #{obj}"
+          return obj
         end
-
-        cls = get_xmi_type(namespace, name)
+        cls = get_class(xmlns, name)
         obj = cls.new
-        obj._xmi.type = "#{namespace}:#{name}"
-        properties.each do | name, value |
+        register_object(obj)
+        obj._xmi.metatype = cls._xmi
+        properties&.each do | name, value |
           obj.__send__(:"#{name}=", value)
         end
-        obj._xmi.object_id = (@object_id += 1)
-        if id
-          if other = @id_to_object[id]
-            raise ArgumentError, "object with id #{id.inspect} already exists : #{other}"
-          end
-          @id_to_object[id] = obj
-          puts "created #{id} : #{other}"
-        end
+        @id_to_object[id] = obj if id
+        @objects << obj
+        logger.info "make_instance : #{xmlns.inspect} : #{name.inspect} : #{properties.inspect} : #{id.inspect} => #{cls} @ #{obj._xmi.object_id}"
         obj
       end
 
-      def get_xmi_namespace(xmlns)
-        xmlns = xmlns.to_sym
-        @namespaces[xmlns] ||= Namespaces.const_get(:"N_#{xmlns}", false)
-      end
-
-      def get_xmi_type(xmlns, name)
+      def get_class(xmlns, name, properties=nil, id=nil)
+        key = [xmlns, name]
+        if cls = @get_class[key]
+          return cls
+        end
         xmlns = xmlns.to_sym
         name_sym = name.to_sym
-        mod = get_xmi_namespace(xmlns)
+        mod = get_module(xmlns)
         return mod.const_get(name_sym, false) if mod.const_defined?(name_sym, false)
-        cls = ::Class.new(Base)
-        cls.extend(BaseAttributes)
-        cls.extend(Metaclass)
-        cls._xmi_initialize_BaseAttributes
+        cls = ::Class.new(Instance)
+        cls.extend(ClassAttributes)
+        register_object(cls)
         cls._xmi.xmlns = xmlns
         cls._xmi.name = name_sym
+        cls._xmi.ident = "#{xmlns}:#{name}"
         mod.const_set(name_sym, cls)
+        @classes << cls
+        @get_class[key] = cls
+        # @classes.sort_by!(&:ident)
+        logger.info "get_class(#{xmlns.inspect}, #{name.inspect}) -> #{cls}"
         cls
+      end
+
+      def get_module(xmlns)
+        xmlns = xmlns.to_sym
+        @namespaces[xmlns] ||= Module.new.tap{|m| @root.const_set(:"N_#{xmlns}", m)}
+      end
+
+      def register_object obj
+        obj._xmi.object_id = (@object_id += 1)
+        @object_id_to_object[obj._xmi.object_id] = obj
+        obj
+      end
+
+      def associate(memberEnd1, name, memberEnd2)
+        outgoing = memberEnd1._xmi.associations[name]
+        outgoing.push(memberEnd2).uniq! if memberEnd2
+        logger.debug { "  associations: #{memberEnd1._xmi.associations.keys.inspect}" }
+      rescue
+        binding.pry
+      end
+
+      def get_object(search)
+        case search
+        when Integer
+          @object_id_to_object[search]
+        when Regexp, String
+          @object_id_to_object.values.select do | obj |
+            meta = obj._
+            search === meta.ident or
+            search === meta.type or
+            search === meta.name or
+            meta.properties.keys.map(&:to_s).any?{|x| search === x } or
+            meta.properties.values.map(&:to_s).any?{|x| search === x} or
+            false
+          end
+        end
+      end
+
+      def set_source_location(obj, *args)
+        obj._.source_location = SourceLocation.new(*args)
       end
     end
 
-    module Metaclass
+    SourceLocation = Struct.new(:uri, :line, :column)
+
+    # Mixin that provides basic Property and Association support.
+    module BaseAttributes
+      def _xmi ; @_xmi ||= Attributes.new(self) ; end
+      alias_method :_, :_xmi
+      def method_missing sel, *args, &blk
+        _xmi.do_method_missing(sel, args, blk)
+      end
+    end
+    module ClassAttributes
+      include BaseAttributes
+      def inspect ; _xmi.inspect_class ; end
+    end
+    class Instance < ::BasicObject
+      include BaseAttributes
+      def inspect ; _xmi.inspect_object ; end
     end
 
-    # These are directly related to XML namespace tags.
-    # See get_xmi_namespace()
-    module Namespaces
-      module N_xmi; end
-      module N_uml; end
-      module N_mof; end
-      module N_mofext; end
+    def self.copy_method(dst,dst_name, src_module, src_name = dst_name)
+      dst.define_method(dst_name, src_module.instance_method(src_name))
     end
+    copy_method(Instance, :__class__, ::Kernel, :class)
+    copy_method(Instance, :__caller_locations__, ::Kernel, :caller_locations)
+    copy_method(Instance, :__raise__, ::Kernel, :raise)
 
     # Generic attributes for all objects.
     class Attributes
       attr_reader :properties, :associations
       attr_accessor :object_id, :id
-      attr_accessor :xmlns, :name
-      attr_accessor :type, :type_prefix, :type_name
+      attr_accessor :xmlns, :name, :ident
+      attr_accessor :source_location
+      attr_accessor :type, :type_prefix, :type_name, :metatype
       attr_accessor :package, :namespace, :class_
       attr_accessor :module, :module_name, :modules
       attr_accessor :imports
-      attr_accessor :url, :line
-      @@object_id = 0
 
-      def initialize
+      def initialize obj
+        @obj = obj
         @properties = {}
         @associations = ::Hash.new{|h, k| h[k] = []}
         @operations = {}
         @modules = {}
         @imports = []
-        @object_id = (@@object_id += 1)
-      end
-    end
-
-    # Mixin that provides basic Property and Association support.
-    module BaseAttributes
-      attr_reader :_xmi
-
-      def _xmi_initialize_BaseAttributes
-        @_xmi = Attributes.new
+        @object_id = 0
       end
 
-      def _xmi_class
-        # BasicObject does not have a #class method.
-        (class << self; self; end).superclass
+      def keys
+        @properties.keys + @associations.keys + @operations.keys
       end
 
-      def method_missing sel, *args, &blk
+      def do_method_missing sel, args, blk
         case
         when blk
           raise ::StandardError, "#{sel}: block given"
         when args.empty?
-          if @_xmi.associations.key?(sel)
-            @_xmi.associations[sel]
+          if @associations.key?(sel)
+            @associations[sel]
           else
-            @_xmi_properties[sel]
+            @properties[sel]
           end
         when (name = sel.to_s) && name[-1] == "=" && args.size == 1
           name = name[0..-2].to_sym
-          if @_xmi.associations.key?(name)
-            @_xmi.associations[name] = [ args[0] ]
+          if @associations.key?(name)
+            @associations[name] = [ args[0] ]
           else
-            @_xmi.properties[name] = args[0]
+            @properties[name] = args[0]
           end
         else
-          # $stderr.puts "sel=#{sel.inspect} args=#{args.inspect}"
-          @_xmi.operations[sel].call(*args)
+          @operations[sel].call(*args)
         end
       end
-    end
 
-    class Base < ::BasicObject
-      include BaseAttributes
-
-      def initialize
-        _xmi_initialize_BaseAttributes
+      def inspect_object
+        "#<RUML::Object #{@metatype.ident} #{@object_id} #{@properties.inspect}>"
       end
 
-      def inspect
-        cls = _xmi_class
-        id = "#{__id__}:#{@_xmi.object_id.inspect}"
-        "#<#{cls&.name} #{id} #{@_xmi_properties.inspect}>"
-      end
-
-      def to_s
-        return inspect
-        cls = _xmi_class
-        id = "#{__id__}:#{@_xmi.object_id.inspect}"
-        "#<#{cls&.name} #{id} />"
+      def inspect_class
+        "#<RUML:Class #{@ident} #{@object_id} #{@properties.inspect}>"
       end
     end
+
   end
 end

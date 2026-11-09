@@ -9,7 +9,7 @@ module RMOF
       end
 
       def get_class obj
-        obj._xmi_class rescue obj.class
+        obj.__class__ rescue obj.class
       end
 
       def type_of? obj, type
@@ -27,7 +27,7 @@ module RMOF
       def get_object_id(obj)
         obj._xmi.object_id
       end
-      def get_namespace(elem)
+      def get_module(elem)
         elem._xmi.namespace
       end
       def set_namespace(elem, namespace)
@@ -114,7 +114,7 @@ module RMOF
           if e = find_element(package, name)
             return e
           end
-          package = get_namespace(package)
+          package = get_module(package)
         end
         nil
       end

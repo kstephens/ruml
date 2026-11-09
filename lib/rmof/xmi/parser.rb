@@ -15,6 +15,7 @@ module RMOF
       include RUML::Logging::Basic
       attr_accessor :parsers
       attr_reader :factory
+      attr_accessor :error, :error_elems
 
       class ParserError < ::StandardError ; end
 
@@ -24,15 +25,19 @@ module RMOF
         @contents = { }
         @href = { }
         @redirects = {
-          "http://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi" =>
-          "http://www.omg.org/spec/UML/20161101/PrimitiveTypes.xmi",
+          # "https://www.omg.org/spec/UML/20131001/UML.xmi" =>
+          # "https://www.omg.org/spec/UML/20161101/UML.xmi",
+          # "https://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi" =>
+          # "https://www.omg.org/spec/UML/20161101/PrimitiveTypes.xmi",
         }
-        @factory = Factory.new
+        @factory = factory ||= Factory.new
       end
 
-      def call(xmi)
+      def call(url)
+        @error = nil
+        @error_elems = []
         parser = ParserCore.new(self)
-        parser.call(xmi).root
+        parser.call(url).root
       end
 
       def load_xml(url)
@@ -51,7 +56,10 @@ module RMOF
       end
 
       def fetch_content(url)
+        logger.info "fetch_content #{url.inspect}"
+        url = url.sub('http://www.omg.org/', 'https://www.omg.org/')
         url = @redirects[url] || url
+        # binding.pry
         if File.exist?(url)
           logger.info "fetch_content: Reading #{url.inspect}"
           return File.read(url)
@@ -75,8 +83,7 @@ module RMOF
 
       def find_href href
         url = URI.parse(href)
-        xmi_id = url.fragment
-        url.fragment = nil
+        xmi_id, url.fragment = url.fragment, nil
         location = url.to_s
         logger.info { "find_href(#{href.inspect})" }
         logger.debug { "find_href location=#{location.inspect} xmi_id=#{xmi_id.inspect}" }
@@ -88,9 +95,7 @@ module RMOF
         logger.debug { "ns_map=#{ns_map.inspect}" }
         logger.debug { "xpath=#{xpath.inspect}" }
         elem = dom.at_xpath(xpath, ns_map)
-        binding.pry unless elem
-        @verbose = false
-        raise StandardError, "cannot resolve href=#{href.inspect} at #{xpath.inspect}" unless elem
+        raise ParserError, "cannot resolve href=#{href.inspect} at #{xpath.inspect}" unless elem
         elem
       end
     end
@@ -103,7 +108,7 @@ module RMOF
 
       def initialize top_level
         @top_level = top_level
-        @root = factory.get_xmi_type("xmi", "XMI").new
+        @root = factory.get_class("xmi", "XMI").new
         @hrefs = {}
         @elem_stack = []
         @target_stack = []
@@ -111,6 +116,7 @@ module RMOF
       end
 
       def call(xmi_url)
+        @error = nil
         xmi_url = xmi_url.to_s
         @xmi_url = xmi_url
         @dom = @top_level.load_xml(xmi_url)
@@ -135,11 +141,13 @@ module RMOF
 
       def parse(elem)
         _parse(elem)
+        raise "WEEEE!" if @elem_stack.size > 10
       rescue StandardError => e
-        elem = elem.dup
-        elem.children.remove
-        raise e, "#{e.message} : at line #{elem.line} : #{elem.to_xml}", e.backtrace
-        #  binding.pry
+        unless @top_level.error
+          @top_level.error = e
+          @top_level.error_elems.concat((@elem_stack + [elem]).map!{|e| bare_xml_node(e)})
+        end
+        raise
       end
 
       def _parse(elem)
@@ -180,8 +188,7 @@ module RMOF
             obj._xmi.id = xmi_id
             obj._xmi.type_prefix = xmi_type_prefix
             obj._xmi.type_name = xmi_type_name
-            obj._xmi.url = @xmi_url
-            obj._xmi.line = elem.line
+            factory.set_source_location(obj, @xmi_url, elem.line)
             @xmi_id_to_object[xmi_id] = obj if xmi_id
             logger.debug { "PROPERTIES : #{properties.inspect}" }
             logger.debug { "OBJECT     : #{obj.inspect}" }
