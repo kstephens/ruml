@@ -8,6 +8,7 @@ gem "method_source", "~> 1.1"
 gem "logger", "~> 1.7"
 gem "mail", "~> 2.9"
 gem "multi_json", "~> 1.21"
+gem "awesome_print", "~> 1.9"
 
 group :development do
   gem "rake", "~> 13.4"
