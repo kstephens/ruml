@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require 'rmof'
+require 'logger'
+require 'ruml/logging'
 
 module RMOF
   module Boolean; end
@@ -9,6 +11,10 @@ module RMOF
 
   module XMI
     class Factory
+      include RUML::Logging::Basic
+
+      attr_reader :root, :classes, :objects
+
       def initialize
         @namespaces = {}
         @object_id = 0

@@ -10,7 +10,7 @@ require 'method_source'
 module RUML
   class Compiler
     class Error < StandardError ; end
-    include RUML::Logging
+    include RUML::Logging::Basic
     EMPTY_ARRAY = [ ].freeze unless defined? EMPTY_ARRAY
 
     # Inputs:
@@ -22,7 +22,6 @@ module RUML
     def initialize opts = nil, &blk
       opts ||= { } # EMPTY_HASH
       @opts = opts
-      self._log_verbose = true # @opts[:verbose]
       @created_modules = [ ]
       @target = opts[:target]
       @current = nil
@@ -43,10 +42,10 @@ module RUML
         respond_to?(sel)
       end
       if sel
-        _log { "#{sel.inspect} : #{node._}" }
+        log { "#{sel.inspect} : #{node._}" }
         send(sel, node)
       else
-        _log { "no handler : #{node._}" }
+        log { "no handler : #{node._}" }
         # binding.pry
         _compile_ownedElement(node)
       end
@@ -79,7 +78,7 @@ module RUML
         node_path_str: node_path_str,
         full_path_str: full_path_str,
       )
-      _log { "#{full_path_str} { " }
+      log { "#{full_path_str} { " }
 
       kind = META_TO_MODULE_CLASS.fetch(node._.meta)
       declaration = "#{kind} #{full_path_str}"
@@ -123,7 +122,7 @@ module RUML
 
       _compile_ownedElement(node)
 
-      _log { "}" }
+      log { "}" }
     end
 
     META_TO_MODULE_CLASS = {
@@ -182,7 +181,7 @@ module RUML
       return if target.constants.include?(name)
       val = args[1]
       val = target.instance_eval(&node.blk) if node.blk
-      _log { "  constant #{node.name.inspect} = #{node.val.inspect}" }
+      log { "  constant #{node.name.inspect} = #{node.val.inspect}" }
       node_const_set(node.namespace, target, name, val)
     end
 
@@ -194,7 +193,7 @@ module RUML
         src.constants.each do | n |
           v = x.const_get(n)
           dst.const_set(n, v)
-          _log { "  import #{dst}::#{n} = #{x}::#{n}" }
+          log { "  import #{dst}::#{n} = #{x}::#{n}" }
         end
       end
     end
@@ -258,7 +257,7 @@ module RUML
     end
 
     def node_define_method(node, target, name, blk)
-      _log { "node_define_method : def #{node._}.#{name}(...)"}
+      log { "node_define_method : def #{node._}.#{name}(...)"}
       blk_source = blk.source.sub(/\A.*?(?=\bdo\b|\{)/m, "")
       expr = node_code(node, "#{target}.define_method(#{name.inspect}) #{blk_source}\n")
       target.define_method(name, &blk)
@@ -273,7 +272,7 @@ module RUML
     end
 
     def node_eval(node, expr)
-      _log { "node_eval : #{node.inspect}" }
+      log { "node_eval : #{node.inspect}" }
       expr = node_code(node, expr)
       ::Kernel.eval(expr)
     rescue => e
@@ -293,7 +292,7 @@ module RUML
 # #########################################
 
 DESC
-      _log { expr }
+      log { expr }
       expr
     end
 

@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
 require 'rmof'
-require 'nokogiri'
 
 module RMOF
   module XMI
     class Formatter
-      def initialize out=$stdout
+      def initialize(out: $stdout, max_depth: nil)
         @out = out
         @depth = 0
+        @max_depth = max_depth
         @seen = {}
       end
 

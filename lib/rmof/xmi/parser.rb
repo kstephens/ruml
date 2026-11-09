@@ -4,17 +4,22 @@ require 'rmof'
 require 'rmof/xmi'
 require 'rmof/xmi/factory'
 require 'rmof/xmi/resolver'
+require 'ruml/logging'
 require 'nokogiri'
 require 'uri'
-require 'typhoeus'
+require 'faraday'
 
 module RMOF
   module XMI
     class Parser
+      include RUML::Logging::Basic
       attr_accessor :parsers
       attr_reader :factory
 
-      def initialize
+      class ParserError < ::StandardError ; end
+
+      def initialize factory: nil
+        logger.level = Logger::INFO
         @doms = { }
         @contents = { }
         @href = { }
@@ -30,36 +35,37 @@ module RMOF
         parser.call(xmi).root
       end
 
-      def load_xml(xmi)
-        @doms[xmi] ||= parse_xml(xmi)
+      def load_xml(url)
+        @doms[url] ||= parse_xml(url)
       end
 
-      def parse_xml(xmi)
-        content = self.content(xmi)
+      def parse_xml(url)
+        content = self.content(url)
         Nokogiri::XML(content) do |config|
           config.noblanks
         end
       end
 
-      def content(xmi)
-        @contents[xmi] ||= fetch_content(xmi)
+      def content(url)
+        @contents[url] ||= fetch_content(url)
       end
 
       def fetch_content(url)
         url = @redirects[url] || url
         if File.exist?(url)
-          $stderr.puts "Reading #{url.inspect}"
+          logger.info "fetch_content: Reading #{url.inspect}"
           return File.read(url)
         end
         uri = URI.parse(url)
         local_file = "vendor/#{uri.host}#{uri.path}"
         if File.exist?(local_file)
-          $stderr.puts "Reading #{local_file.inspect}"
+          logger.info "fetch_content: Reading #{local_file.inspect} for #{url.inspect}"
           File.read(local_file)
         else
-          # binding.pry
-          $stderr.puts "GET #{url.inspect}"
-          Typhoeus.get(url).body
+          logger.info "fetch_content: GET #{url.inspect}"
+          response = Faraday.get(url)
+          raise ParserError, "GET #{url.inspect} failed : #{response.status}" if response.status != 200
+          response.body
         end
       end
 
@@ -68,42 +74,32 @@ module RMOF
       end
 
       def find_href href
-        @verbose = true
         url = URI.parse(href)
         xmi_id = url.fragment
         url.fragment = nil
         location = url.to_s
-        log { "href=#{href.inspect}" }
-        log { "location=#{location.inspect} xmi_id=#{xmi_id.inspect}" }
+        logger.info { "find_href(#{href.inspect})" }
+        logger.debug { "find_href location=#{location.inspect} xmi_id=#{xmi_id.inspect}" }
         dom = load_xml(location)
+        logger.debug { "dom.namespaces=#{dom.namespaces.inspect}" }
         xmlns_xmi = dom.namespaces["xmlns:xmi"]
         ns_map = {"xmi" => xmlns_xmi}
         xpath = "//*[@xmi:id=#{xmi_id.inspect}]"
-        log { "dom.namespaces=#{dom.namespaces.inspect}" }
-        log { "ns_map=#{ns_map.inspect}" }
-        log { "xpath=#{xpath.inspect}" }
-        binding.pry unless ns_map["xmi"]
+        logger.debug { "ns_map=#{ns_map.inspect}" }
+        logger.debug { "xpath=#{xpath.inspect}" }
         elem = dom.at_xpath(xpath, ns_map)
         binding.pry unless elem
         @verbose = false
         raise StandardError, "cannot resolve href=#{href.inspect} at #{xpath.inspect}" unless elem
         elem
       end
-
-      def log msg=nil
-        if @verbose
-          msg ||= yield
-          $stderr.puts "### #{self.class.name} # #{msg}"
-        end
-      end
     end
 
     class ParserCore
       attr_accessor :top_level, :dom, :root
 
-      def factory
-        @top_level.factory
-      end
+      def factory ; @top_level.factory ; end
+      def logger ; @top_level.logger ; end
 
       def initialize top_level
         @top_level = top_level
@@ -123,7 +119,6 @@ module RMOF
         parse_doc(@dom)
         @phase = :resolve
         parse_doc(@dom)
-        # binding.pry
         self
       end
 
@@ -148,9 +143,10 @@ module RMOF
       end
 
       def _parse(elem)
-        log { "### ######################################################" }
-        log { "ELEM  : #{elem.name} @#{elem.object_id}" }
-        log { "ATTRS : #{convert_attrs(elem).inspect}" }
+        logger.debug { "### ######################################################" }
+        logger.debug { "ELEM  : #{elem.name} @#{elem.object_id}" }
+        logger.debug { "ATTRS : #{convert_attrs(elem).inspect}" }
+        attr = elem.name.to_sym
         parent = @target_stack.last
         @elem_stack.push(elem)
         begin
@@ -187,17 +183,16 @@ module RMOF
             obj._xmi.url = @xmi_url
             obj._xmi.line = elem.line
             @xmi_id_to_object[xmi_id] = obj if xmi_id
-            log { "PROPERTIES : #{properties.inspect}" }
-            log { "OBJECT     : #{obj.inspect}" }
+            logger.debug { "PROPERTIES : #{properties.inspect}" }
+            logger.debug { "OBJECT     : #{obj.inspect}" }
           when href
             if @phase == :build
               dom = @top_level.resolve_href(href)
               other = parse(dom)
-              attr = elem.name.to_sym
-              parent._xmi.associations[attr].push(other)
-              log { "parent=#{parent}" }
-              log { "attr=#{attr.inspect}" }
-              log { "prop=#{parent.__send__(attr)}" }
+              factory.associate(parent, attr, other)
+              logger.debug { "parent=#{parent}" }
+              logger.debug { "attr=#{attr.inspect}" }
+              logger.debug { "prop=#{parent.__send__(attr)}" }
               # binding.pry
             end
           when elem.attributes.empty?
@@ -209,12 +204,10 @@ module RMOF
           if obj
             @target_stack.push(obj)
             begin
-              if @phase == :resolve and obj and parent
-                log { "  obj=#{obj}" }
-                log { "  parent=#{parent}" }
-                attr = elem.name.to_sym
-                parent._xmi.associations[attr].push(obj)
-                log { "  associations: #{parent._xmi.associations.keys.inspect}" }
+              if @phase == :resolve && obj && parent
+                logger.debug { "  obj=#{obj}" }
+                logger.debug { "  parent=#{parent}" }
+                factory.associate(parent, attr, obj)
               end
               parse_children(elem)
             ensure
@@ -254,11 +247,10 @@ module RMOF
         nil
       end
 
-      def log msg=nil
-        if @verbose
-          msg ||= yield
-          $stderr.puts "### #{self.class.name} # #{msg}"
-        end
+      def bare_xml_node(elem)
+        elem = elem.dup
+        elem.children.remove
+        "#{@xmi_url}:#{elem.line} #{elem.to_xml}"
       end
     end
   end

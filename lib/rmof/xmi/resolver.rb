@@ -3,16 +3,19 @@
 require 'rmof/xmi'
 require 'rmof/xmi/introspection'
 require 'ruml/traverser'
+require 'ruml/logging'
 
 module RMOF
   module XMI
     class Resolver
-      include RUML::Traverser
+      include RUML::Logging::Basic
+      include RUML::TraverserMethods
 
       def initialize
         @i = Introspection.new
         @package_for = {}
-        @verbose = true
+        self.log_verbose = false
+        logger.level = Logger::WARN
       end
 
       def call elem
@@ -44,7 +47,7 @@ module RMOF
         traverse elem do
           namespace = @namespace_stack.last
           if elem.name
-            log { "resolve_namespace #{elem} #{elem.name} -> #{namespace} #{namespace&.name}"}
+            logger.info { "resolve_namespace #{elem} #{elem.name} -> #{namespace} #{namespace&.name}"}
             @i.set_namespace(elem, namespace)
             @namespace_stack.push(elem)
             recur_associations(:resolve_namespace, elem)
@@ -58,7 +61,7 @@ module RMOF
       def resolve_packages(elem)
         traverse elem do
           package = @package_stack.last
-          log { "resolve_packages #{elem} -> #{package}"}
+          logger.info { "resolve_packages #{elem} -> #{package}"}
           @i.set_package(elem, package)
           @package_for[elem] = package
           if @i.type_of?(elem, "Package")
@@ -75,14 +78,14 @@ module RMOF
         traverse elem do
           if @i.type_of?(elem, "Package")
             package = @package_stack.last
-            log { "import_packages #{elem}"}
+            logger.info { "import_packages #{elem}"}
             @package_stack.push(elem)
             elem.packageImport&.each do | import |
               if package = @i.find_element(elem, import.importedPackage)
-                log { "import_packages #{elem} <- #{import.importedPackage}"}
+                logger.info { "import_packages #{elem} <- #{import.importedPackage}"}
                 import_package(elem, package)
               else
-                log { "WARNING: packageImport : not found for #{import.importedPackage}"}
+                logger.warn { "WARNING: packageImport : not found for #{import.importedPackage}"}
               end
             end
             @package_stack.pop
@@ -94,13 +97,6 @@ module RMOF
 
       def import_package target, source
         @i.import_package target, source
-      end
-
-      def log msg=nil
-        if @verbose
-          msg ||= yield
-          $stderr.puts "### #{self.class.name} : #{msg}"
-        end
       end
     end
   end

@@ -7,7 +7,7 @@ require 'method_source'
 module RMOF
   module XMI
     class Compiler
-      include RUML::Traverser
+      include RUML::TraverserMethods
       attr_accessor :resolver
 
       def initialize out=$stdout

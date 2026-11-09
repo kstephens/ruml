@@ -38,7 +38,7 @@ module RUML
     end
 
     def traverse_log m
-      $stderr.puts "### #{self.class.name} : traversing #{@traverse_ident} : #{"  " * @traverse_depth} #{m}"
+      # $stderr.puts "### #{self.class.name} : traversing #{@traverse_ident} : #{"  " * @traverse_depth} #{m}"
     end
   end
   class Traverser
