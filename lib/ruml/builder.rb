@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'ruml'
-require 'ruml/runtime'
+require 'ruml/core/runtime'
 require 'ruml/compiler'
 require 'ruml/navigable'
 require 'ruml/ast'

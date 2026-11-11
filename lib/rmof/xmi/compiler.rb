@@ -22,7 +22,7 @@ module RMOF
         @indent_comment = 0
 
         emit <<-EOF
-require 'ruml/loadtime'
+require 'ruml/core/loadtime'
         EOF
         traversing :emit_module do
           emit_header "Packages, Classes"
@@ -60,7 +60,7 @@ require 'ruml/loadtime'
             emit_element_begin elem, "module #{elem.name}"
             unless @root_package
               @root_package = elem
-              emit "RMOF_ = RUML::Loadtime.new(self)"
+              emit "RMOF_ = RUML::Core::Loadtime.new(self)"
             end
             recur_associations(:emit_module, elem)
             emit_module_end elem, "module #{elem.name}"

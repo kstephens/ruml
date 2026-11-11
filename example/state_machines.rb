@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'ruml/runtime'
+require 'ruml/core/runtime'
 require 'ruml/builder'
 
 module MyTest

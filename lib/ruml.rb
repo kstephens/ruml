@@ -8,5 +8,5 @@ module RUML
   class Error < StandardError ; end
 end
 
-require 'ruml/runtime'
+require 'ruml/core/runtime'
 require 'ruml/extensions'

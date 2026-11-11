@@ -4,7 +4,7 @@ require 'ruml'
 
 describe "test1", skip: true do
   it "handles Factory correctly" do
-  f = RUML::Runtime::Factory.new
+  f = RUML::Core::Runtime::Factory.new
 
   p1 = f.new :Property,
   :name => :left,

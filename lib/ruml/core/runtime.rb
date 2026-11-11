@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module RUML
-
+module Core
 module Runtime
   N = 1000000000000000 unless defined? N
   STAR = (0 .. N) unless defined? STAR
@@ -60,4 +60,5 @@ module Runtime
     end
   end
 end
+  end
 end
