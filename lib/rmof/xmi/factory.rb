@@ -82,10 +82,9 @@ module RMOF
 
       def associate(memberEnd1, name, memberEnd2)
         outgoing = memberEnd1._xmi.associations[name]
-        outgoing.push(memberEnd2).uniq! if memberEnd2
+        raise unless memberEnd2
+        outgoing.push(memberEnd2).uniq!(&:__id__) if memberEnd2
         logger.debug { "  associations: #{memberEnd1._xmi.associations.keys.inspect}" }
-      rescue
-        binding.pry
       end
 
       def get_object(search)
@@ -181,6 +180,10 @@ module RMOF
         else
           @operations[sel].call(*args)
         end
+      end
+
+      def kind_name
+        @ident || @metatype&.ident
       end
 
       def inspect_object

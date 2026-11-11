@@ -141,7 +141,7 @@ module RMOF
 
       def parse(elem)
         _parse(elem)
-        raise "WEEEE!" if @elem_stack.size > 10
+        # raise "WEEEE!" if @elem_stack.size > 10
       rescue StandardError => e
         unless @top_level.error
           @top_level.error = e

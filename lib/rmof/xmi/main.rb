@@ -18,6 +18,7 @@ def parse_xmi input_file
   resolver = RMOF::XMI::Resolver.new
   # binding.pry
   root = resolver.call(root)
+  px(root)
   binding.pry
   root
 end
@@ -25,7 +26,7 @@ def print_xmi root
   RMOF::XMI::Formatter.new.call(root)
 end
 def px root
-  RMOF::XMI::Formatter.new(max_depth: 10).call(root)
+  RMOF::XMI::Formatter.new(max_depth: 20).call(root)
   nil
 end
 
