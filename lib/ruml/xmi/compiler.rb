@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-require 'rmof/xmi/resolver'
+require 'ruml/xmi/resolver'
 require 'ruml/traverser'
 require 'method_source'
 
-module RMOF
+module RUML
   module XMI
     class Compiler
       include RUML::TraverserMethods

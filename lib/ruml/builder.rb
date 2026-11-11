@@ -257,7 +257,7 @@ RUBY
 
     def _compile(opts = { })
       opts = @opts.merge(opts)
-      c = Compiler.new(opts)
+      c = Compiler::Compiler.new(opts)
       # binding.pry
       c.run(@root)
       c

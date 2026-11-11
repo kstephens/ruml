@@ -2,7 +2,7 @@
 
 require 'rmof'
 
-module RMOF
+module RUML
   module XMI
     class Formatter
       def initialize(out: $stdout, max_depth: nil)
@@ -41,7 +41,7 @@ module RMOF
       end
 
       def emit_basic(obj)
-        if RMOF::XMI::BaseAttributes === obj
+        if RUML::XMI::BaseAttributes === obj
           desc = "#{obj._xmi.kind_name} #{obj._xmi.object_id}"
           id = obj.__id__
         else

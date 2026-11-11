@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-require 'rmof/xmi'
-require 'rmof/xmi/introspection'
+require 'ruml/xmi'
+require 'ruml/xmi/introspection'
 require 'ruml/traverser'
 require 'ruml/logging'
 
-module RMOF
+module RUML
   module XMI
     class Resolver
       include RUML::Logging::Basic

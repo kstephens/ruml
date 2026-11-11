@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require 'rmof/xmi/factory'
+require 'ruml/xmi/factory'
 
-describe RMOF::XMI::Factory do
+describe RUML::XMI::Factory do
   describe '#associate' do
     it 'keeps distinct objects and removes repeated references by identity' do
       factory = described_class.new

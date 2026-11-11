@@ -1,15 +1,15 @@
 # frozen_string_literal: true
 
 require 'rmof'
-require 'rmof/xmi'
-require 'rmof/xmi/factory'
-require 'rmof/xmi/resolver'
+require 'ruml/xmi'
+require 'ruml/xmi/factory'
+require 'ruml/xmi/resolver'
 require 'ruml/logging'
 require 'nokogiri'
 require 'uri'
 require 'faraday'
 
-module RMOF
+module RUML
   module XMI
     class Parser
       include RUML::Logging::Basic

@@ -8,7 +8,9 @@ module RMOF
   module Boolean; end
   ::FalseClass.extend(Boolean)
   ::TrueClass.extend(Boolean)
+end
 
+module RUML
   module XMI
     class Factory
       include RUML::Logging::Basic

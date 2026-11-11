@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 require 'tempfile'
-require 'rmof/xmi/parser'
+require 'ruml/xmi/parser'
 
-describe RMOF::XMI::Parser do
+describe RUML::XMI::Parser do
   it 'resolves repeated references to the same object without duplicating associations' do
     xml = <<~XML
       <xmi:XMI xmlns:xmi="http://www.omg.org/spec/XMI/20131001">

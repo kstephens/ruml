@@ -5,7 +5,7 @@ module RUML
     class Loadtime
       def initialize mod
         @mod = mod
-        @factory = RMOF::XMI::Factory.new
+        @factory = RUML::XMI::Factory.new
       end
 
       def meta target, cls, props

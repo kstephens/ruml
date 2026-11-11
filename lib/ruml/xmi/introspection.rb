@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module RMOF
+module RUML
   module XMI
     # This is suitiable for UML bootstrapping from XMI.
     class Introspection

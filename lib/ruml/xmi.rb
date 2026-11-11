@@ -2,7 +2,7 @@
 
 require 'rmof'
 
-module RMOF
+module RUML
   module XMI
   end
 end

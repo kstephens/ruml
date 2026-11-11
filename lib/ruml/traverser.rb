@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require 'rmof/xmi'
-require 'rmof/xmi/introspection'
+require 'ruml/xmi'
+require 'ruml/xmi/introspection'
 
 module RUML
   module TraverserMethods

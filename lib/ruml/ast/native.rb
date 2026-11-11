@@ -3,7 +3,7 @@
 require 'ruml/compiler/ast'
 
 module RUML
-  class Compiler
+  module Compiler
     module AST
     module Native
       def self.lookup_module name
