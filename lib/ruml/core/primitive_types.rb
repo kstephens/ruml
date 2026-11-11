@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'rmof/runtime'
+require 'ruml/runtime'
 require 'ruml/builder'
 require 'rational'
 require 'complex'
@@ -104,4 +104,3 @@ module RUML
     ._compile(language: :ruby)
   end
 end
-

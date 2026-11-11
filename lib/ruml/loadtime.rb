@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module RMOF
+module RUML
   class Loadtime
     def initialize mod
       @mod = mod
@@ -8,7 +8,7 @@ module RMOF
     end
 
     def meta target, cls, props
-      # $stderr.puts "### RMOF::Loadtime.meta(#{target.inspect}, #{cls.inspect}, #{props.inspect})"
+      # $stderr.puts "### RUML::Loadtime.meta(#{target.inspect}, #{cls.inspect}, #{props.inspect})"
       obj = @factory.make_instance(:xmi, cls, props)
       yield obj if block_given?
     end

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module RMOF
+module RUML
 
 module Runtime
   N = 1000000000000000 unless defined? N

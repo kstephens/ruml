@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'ruml'
-require 'rmof/runtime'
+require 'ruml/runtime'
 require 'ruml/logging'
 require 'ruml/ast'
 require 'rmof/code_generator'
@@ -150,9 +150,9 @@ module RUML
 
       lines = []
       if node._.isAbstract
-        lines << "#{node_path}.include(::RMOF::Runtime::Uninstantiatable)"
+        lines << "#{node_path}.include(::RUML::Runtime::Uninstantiatable)"
       else
-        lines << "#{node_path}.include(::RMOF::Runtime::Instantiable)"
+        lines << "#{node_path}.include(::RUML::Runtime::Instantiable)"
       end
       node._.superClass_remaining.each do | super_ |
         gem_path = parent._.find(super_)._.full_path_str

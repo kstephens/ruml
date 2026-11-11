@@ -50,8 +50,8 @@ describe "Builder" do
 
   b._compile(:verbose => 9)
 
-  inst = ::RMOF::Runtime::Instantiable
-  uninst = ::RMOF::Runtime::Uninstantiatable
+  inst = ::RUML::Runtime::Instantiable
+  uninst = ::RUML::Runtime::Uninstantiatable
 
   p2 = MM::P1::P2
 
@@ -78,7 +78,7 @@ describe "Builder" do
 
   o1 = c1.new(:x => "o1", :y => [ 1, 2, 3 ])
 
-  expect { c2.new(:x => "foobar", :y => [ 1, 2, 3 ]) }.to raise_error(RMOF::Runtime::UninstantiatableError)
+  expect { c2.new(:x => "foobar", :y => [ 1, 2, 3 ]) }.to raise_error(RUML::Runtime::UninstantiatableError)
 
   o3 = c3.new(x: "c3.x", z: [2, 3])
   expect(o3.to_s).to eq("MM::P1::P2::C3 : C3.z=[2, 3]")
@@ -88,4 +88,3 @@ describe "Builder" do
 
   end
 end
-

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module RMOF
+module RUML
   class Context
     attr_accessor :current
 
@@ -21,12 +21,13 @@ module RMOF
         @current = @stack.pop
       end
     end
+
   end
 
   class Contexts
     def initialize
       @contexts = Hash.new do | h, k |
-        h[k] = ::RMOF::Context.new(k)
+        h[k] = ::RUML::Context.new(k)
       end
     end
     def [] k ; @contexts[k] ; end

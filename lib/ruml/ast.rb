@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'rmof/context'
+require 'ruml/context'
 
 module RUML
   module AST
@@ -188,7 +188,7 @@ module RUML
     class Printer
       def initialize opts = {}
         @out = opts[:out] || $stdout
-        @context = ::RMOF::Context.new(:printer)
+        @context = ::RUML::Context.new(:printer)
       end
 
       def call node

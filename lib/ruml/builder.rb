@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
 require 'ruml'
-require 'rmof/runtime'
+require 'ruml/runtime'
 require 'ruml/compiler'
 require 'ruml/navigable'
 require 'ruml/ast'
 require 'ruml/logging'
-require 'rmof/context'
+require 'ruml/context'
 
 module RUML
 
@@ -23,7 +23,7 @@ module RUML
       @opts = opts
       @_log_verbose = true # @opts[:verbose]
       @created = [ ]
-      @contexts = ::RMOF::Contexts.new
+      @contexts = ::RUML::Contexts.new
       @root = @opts[:root] || _build(:root, [])
       @root.ownedElement = []
       @node_for_module = {}

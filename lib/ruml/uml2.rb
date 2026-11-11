@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'rmof/runtime'
+require 'ruml/runtime'
 require 'ruml/builder'
 
 module RUML
