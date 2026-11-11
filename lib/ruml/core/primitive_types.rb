@@ -100,7 +100,7 @@ module RUML
           end
         end
       end
-    .tap{|b| ::RUML::AST::Printer.new().call(b.root)}
+    .tap{|b| ::RUML::Compiler::AST::Printer.new().call(b.root)}
     ._compile(language: :ruby)
   end
 end

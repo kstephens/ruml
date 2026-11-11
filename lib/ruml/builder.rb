@@ -4,7 +4,7 @@ require 'ruml'
 require 'ruml/core/runtime'
 require 'ruml/compiler'
 require 'ruml/navigable'
-require 'ruml/ast'
+require 'ruml/compiler/ast'
 require 'ruml/logging'
 require 'ruml/context'
 
@@ -15,7 +15,7 @@ module RUML
     include Logging
     attr_reader :created, :root, :contexts
 
-    include AST::Repr, Logging
+    include Compiler::AST::Repr, Logging
     def _repr ; @contexts.node ; end
 
     def initialize opts = nil, &blk
@@ -175,7 +175,7 @@ RUBY
       blk ||= _args.pop if ::Proc === _args[-1]
       opts ||= _args.pop if ::Hash === _args[-1]
       name = _name(_args[0])
-      node = ::RUML::AST::Node[
+      node = ::RUML::Compiler::AST::Node[
         name: name,
         stereotype: [],
       ]
@@ -208,7 +208,7 @@ RUBY
 
     def _type_to_node x
       case type
-      when nil, AST::Node, Symbol, String
+      when nil, Compiler::AST::Node, Symbol, String
         x
       when ::Class
         @node_for_module[x] ||= begin
@@ -235,7 +235,7 @@ RUBY
     def _name arg
       case arg
       when ::String, ::Symbol then arg.to_s
-      when AST::Node        then arg.name
+      when Compiler::AST::Node then arg.name
       end
     end
 

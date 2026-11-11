@@ -1,14 +1,16 @@
 # frozen_string_literal: true
 
-require 'ruml/ast'
+require 'ruml/compiler/ast'
 
 module RUML
-  module AST
+  class Compiler
+    module AST
     module Native
       def self.lookup_module name
         name.split("::").inject(::Object) do | mod, name |
           return unless ::Module === mod
           mod.const_get(name)
+          end
         end
       end
       def self.build(mod)
