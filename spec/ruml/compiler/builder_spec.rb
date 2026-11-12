@@ -2,12 +2,14 @@
 
 require 'ruml/compiler/builder'
 
+module RUML::Spec::MM ; end
+
 describe "Builder" do
   it "builds and compiles to Ruby" do
 
-  module MM; end
+  m = RUML::Spec::MM
 
-  b = RUML::Compiler::Builder.new(target: MM) do | b |
+  b = RUML::Compiler::Builder.new(target: m) do
     package :P1 do
       package :P2 do
         class_ :C1 do
@@ -53,7 +55,7 @@ describe "Builder" do
   inst = ::RUML::Core::Runtime::Instantiable
   uninst = ::RUML::Core::Runtime::Uninstantiatable
 
-  p2 = MM::P1::P2
+  p2 = m::P1::P2
 
   c1 = p2::C1
   c2 = p2::C2
@@ -77,14 +79,15 @@ describe "Builder" do
   expect(c4.ancestors).to include(c4::RUML_InstanceBehavior)
 
   o1 = c1.new(:x => "o1", :y => [ 1, 2, 3 ])
+  expect(o1).to_not be_nil
 
   expect { c2.new(:x => "foobar", :y => [ 1, 2, 3 ]) }.to raise_error(RUML::Core::Runtime::UninstantiatableError)
 
   o3 = c3.new(x: "c3.x", z: [2, 3])
-  expect(o3.to_s).to eq("MM::P1::P2::C3 : C3.z=[2, 3]")
+  expect(o3.to_s).to eq("#{m}::P1::P2::C3 : C3.z=[2, 3]")
 
   o4 = c4.new(z: [2, 3])
-  expect(o4.to_s).to eq("MM::P1::P2::C4 : MM::P1::P2::C4 : C3.z=[2, 3] : C4")
+  expect(o4.to_s).to eq("#{m}::P1::P2::C4 : #{m}::P1::P2::C4 : C3.z=[2, 3] : C4")
 
   end
 end

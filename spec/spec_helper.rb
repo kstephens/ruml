@@ -27,3 +27,8 @@ RSpec.configure do |config|
   #   expectations.syntax = :expect
   # end
 end
+
+module RUML
+  module Spec
+  end
+end
