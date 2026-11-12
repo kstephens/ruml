@@ -75,7 +75,9 @@ class Main
 
     json = JSON.pretty_generate(result)
     puts(json)
-    File.write("#{dst_dir}/#{progname}.json", json)
+    json_file = dst_dir / "#{progname}.json"
+    json_file.unlink if json_file.exist?
+    File.write(json_file, json)
   end
 
   def omg_spec_scrape url
@@ -135,6 +137,7 @@ class Main
     dst_path.parent.mkpath
     dst_path.unlink if dst_path.exist?
     dst_path.write(response.body)
+    dst_path.chmod(0444)
 
     dst_links.each do | dst_link |
       dst_target = dst_path.relative_path_from(dst_link.parent)
