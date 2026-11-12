@@ -24,6 +24,17 @@ module RUML
       def default_opts
         {}
       end
+
+      # def self.included target
+      #   super
+      #   target.extend ModuleMethods
+      # end
+      # module ModuleMethods
+      #   def properties; @properties = {} ;end
+      #   def property name, default
+      #     @@properties
+      #   end
+      # end
     end
   end
 end

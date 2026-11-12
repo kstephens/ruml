@@ -1,61 +1,121 @@
 # frozen_string_literal: true
 
-module RUML::Compiler::Target
-  class Ruby
-    def initialize opts={}
-      @opts = opts.dup
-    end
+require 'ruml/compiler/target'
+require 'ruml/support/initialize'
+require 'method_source'
 
+module RUML::Compiler
+  class Target::Ruby < Target
     UNLIMITED = 12345678901234567890
     STAR = UNLIMITED
 
-    def coerce_number x
-      case x
-      when nil, Integer then x
-      when :*, '*'      then UNLIMITED
-      when String       then Integer(x)
+    def emit_namespace(node)
+      path = node._.namespace_path
+      node_path_str = path.map(&:name).compact.join("::")
+      full_path_str = node._.root_package.to_s + "::" + node_path_str
+      kind = META_TO_MODULE_CLASS.fetch(node._.meta)
+      declaration = "#{kind} #{full_path_str}"
+
+      node._.to_h.update(
+        path: path,
+        node_path_str: node_path_str,
+        full_path_str: full_path_str,
+        full_path_instance_behavior: "#{full_path_str}::RUML_InstanceBehavior",
+        full_path_module_behavior: "#{full_path_str}::RUML_ModuleBehavior",
+        ruby_module_kind: kind,
+        ruby_declaration: declaration,
+        ruby_declaration_full: "#{kind} #{full_path_str}",
+      )
+      log { "#{full_path_str} { " }
+
+      if node._.meta == :class
+        supers = node.superClass.map{|super_| node.namespace._.lookup_node(super_)}
+        if (super_ = supers.shift)
+          declaration << " < #{super_._.full_path_str}"
+        end
+        node._.superClass_remaining = supers
       end
+
+      lines = []
+      lines << declaration
+      lines << "  module RUML_InstanceBehavior"
+      lines << "  end"
+      lines << "  module RUML_ModuleBehavior"
+      lines << "  end"
+      lines << "  def self.included(target)"
+      lines << "    target.include(RUML_InstanceBehavior)"
+      lines << "    target.extend(RUML_ModuleBehavior)"
+      lines << "  end"
+      lines << "  self"
+      lines << "end"
+      lines << ""
+      self << lines
     end
 
-    def coerce_multiplicity m
-    result = \
-      case m
-      when nil
-        1..1
-      when Range
-        m
-      when Integer
-        m .. m
-      when :*, '*'
-        0..UNLIMITED
-      when String
-        a, b = m.split('..')
-        a = coerce_number(a)
-        b = coerce_number(b)
-        a..b
+    def emit_generalization node
+      node_path = node._.full_path_str
+      parent = node.namespace
+      generals = (node.generalization || []).map(&:general)
+      generals.map!{|g| parent._._find(g)._.full_path_str}
+
+      lines = []
+      if node._.isAbstract
+        lines << "#{node_path}.include(::RUML::Core::Runtime::Uninstantiatable)"
       else
-        raise ArgumentError, "given #{m.inspect}"
+        lines << "#{node_path}.include(::RUML::Core::Runtime::Instantiable)"
       end
-      # $stderr.puts "  ### coerce_multiplicity #{m.inspect} => #{result.inspect}"
-      result
+      node._.superClass_remaining.each do | super_ |
+        gen_path = parent._.find(super_)._.full_path_str
+        lines << "#{node_path}.include(#{gen_path}::RUML_InstanceBehavior)"
+      end
+      generals.each do | gen_path |
+        lines << "#{node_path}.include(#{gen_path}::RUML_InstanceBehavior)"
+      end
+      lines << "#{node_path}.include(#{node_path}::RUML_InstanceBehavior)"
+      lines << "#{node_path}.extend(#{node_path}::RUML_ModuleBehavior)"
+      self << lines
     end
 
-    LAMBDA_NIL = lambda { | *args | nil } unless defined? LAMBDA_NIL
-
-    def hasStereotype? node, name
-      name = name.to_s
-      node.stereotype&.find{|x| x.name == name}
+    def emit_operation(node)
+      name = node.name.to_sym
+      if ! body && node._.blk
+        body = node._.blk.source.sub(/\A.*?(?=\bdo\b|\{)/m, "")
+      end
+      self << "module " << full_path_module(node) << "\n"
+      self << node._.isStatic ? parent._.full_path_module_behavior : parent._.full_path_instance_behavior << "\n"
+      self << <<"RUBY"
+def #{name}
+  #{body}
+end
+RUBY
+      self << "end\n"
     end
 
-    def generate_property node
-      $stderr.puts "#### _generate_property #{node.inspect}" if @verbose
-      opts = node._.opts ||= {}
+    def emit_constant(node)
+      name_upper = node.name.to_s.upper
+      lines = []
+      lines << "module " << full_path_module(node)
+      if method
+          lines << <<"RUBY"
+        def self.#{node.name} ; #{name_upper} ; end
+        def #{node.name} : #{name_upper} ; end
+RUBY
+        end
+      self << <<"RUBY"
+#{name_upper} = #{value}
+RUBY
+      lines << "end"
+      self << lines
+    end
+
+    def emit_property node
+      # opts = node._.opts ||= {}
       name = node.name
       type = node.type._.full_path_str
       multiplicity = coerce_multiplicity(node.multiplicity)
 
       if hasStereotype?(node.type, :primitive)
-        coerce = lambda { | msg |
+        coerce = lambda { | _msg |
           <<"RUBY"
 __val = __val.nil? ? __val : ::#{type}.coerce(__val)
 RUBY
@@ -195,16 +255,18 @@ RUBY
   end
 RUBY
       end
-      {
-        node: node,
-        name: name,
-        type: type,
-        multiplicity: multiplicity,
-        opts: opts,
-        code: code,
-      }
+      node._.resolved_type = type
+      node._.multiplicity = multiplicity
+      self << "module " << full_path_module(node) << "\n"
+      self << code
+      self << "end\n"
     end
 
+
+    def full_path_module(node)
+      parent = node.namespace
+      node._.isStatic ? parent._.full_path_module_behavior : parent._.full_path_instance_behavior
+    end
 
     def generate_association \
       name1, type1, multiplicity1, opts1,
@@ -329,7 +391,7 @@ RUBY
     self
   end
 RUBY
-
+      code
     end
 
     def generate_association_N name, type, multiplicity, subsets, ename, etype
@@ -374,6 +436,54 @@ RUBY
     self
   end
 RUBY
+      code
     end
+
+    def coerce_multiplicity_value x
+      case x
+      when nil, Integer then x
+      when :*, '*'      then UNLIMITED
+      when String       then Integer(x)
+      end
+    end
+
+    def coerce_multiplicity m
+    result = \
+      case m
+      when nil
+        1..1
+      when Range
+        m
+      when Integer
+        m .. m
+      when :*, '*'
+        0..UNLIMITED
+      when String
+        a, b = m.split('..')
+        a = coerce_multiplicity_value(a)
+        b = coerce_multiplicity_value(b)
+        a..b
+      else
+        raise ArgumentError, "given #{m.inspect}"
+      end
+      # $stderr.puts "  ### coerce_multiplicity #{m.inspect} => #{result.inspect}"
+      result
+    end
+
+    META_TO_MODULE_CLASS = {
+      package: "module",
+      namespace: "module",
+      class: "class",
+      root: nil,
+    }.freeze
+
+
+    LAMBDA_NIL = proc { nil } unless defined? LAMBDA_NIL
+
+    def hasStereotype? node, name
+      name = name.to_s
+      node.stereotype&.find{|x| x.name == name}
+    end
+
   end # module
 end # module

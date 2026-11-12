@@ -104,6 +104,18 @@ module RUML
         node.ownedElement.find{|c| c.name == name}
       end
 
+      def lookup_node ident
+        return ident if AST::Node === ident
+        ident = ident.to_s
+        node = self.node
+        while node
+          if (found = node._.find(ident))
+            return found
+          end
+          node = node.namespace
+        end
+      end
+
       def isStatic
         meta == :operation && args.include?(:static)
       end

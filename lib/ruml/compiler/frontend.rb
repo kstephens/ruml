@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
 require 'ruml'
+require 'ruml/compiler'
 require 'ruml/core/runtime'
 require 'ruml/support/logging'
 require 'ruml/compiler/ast'
 require 'ruml/compiler/target/ruby'
-require 'method_source'
 
 module RUML
   module Compiler
@@ -29,7 +29,7 @@ module RUML
       @current_stack = [ ]
       @module_to_node = { }
       @pass = 1
-      @code_generator = RUML::Compiler::Target::Ruby.new
+      @code_generator = RUML::Compiler::Target::Ruby
       raise ArgumentError, ":target not a Module : #{@target.inspect}" unless Module === @target
     end
 
@@ -69,8 +69,6 @@ module RUML
     end
 
     def compile_namespace_1 node
-      raise "target is nil" if target.nil?
-
       path = node._.namespace_path
       node_path_str = path.map(&:name).compact.join("::")
       full_path_str = @target.to_s + "::" + node_path_str
@@ -78,34 +76,11 @@ module RUML
         path: path,
         node_path_str: node_path_str,
         full_path_str: full_path_str,
+        root_package: @target.to_s,
       )
       log { "#{full_path_str} { " }
 
-      kind = META_TO_MODULE_CLASS.fetch(node._.meta)
-      declaration = "#{kind} #{full_path_str}"
-
-      if node._.meta == :class
-        supers = node.superClass.map{|super_| lookup_node(node.namespace, super_)}
-        if super_ = supers.shift
-          declaration << " < #{super_._.full_path_str}"
-        end
-        node._.superClass_remaining = supers
-      end
-
-      lines = [""]
-      lines << declaration
-      lines << "  module RUML_InstanceBehavior"
-      lines << "  end"
-      lines << "  module RUML_ModuleBehavior"
-      lines << "  end"
-      lines << "  def self.included(target)"
-      lines << "    target.include(RUML_InstanceBehavior)"
-      lines << "    target.extend(RUML_ModuleBehavior)"
-      lines << "  end"
-      lines << "  self"
-      lines << "end"
-      lines << ""
-
+      lines = @code_generator.new.emit_namespace(node).to_s
       module_ = node_eval(node, lines)
       node._.ruby_module = module_
       node._.ruby_module_instance = module_.const_get("RUML_InstanceBehavior")
@@ -116,7 +91,7 @@ module RUML
       node._.ruby_extend&.each do | m |
         module_.extend(m)
       end
-      target.const_set(:RUML_COMPILER_NODE, node)
+      # target.const_set(:RUML_COMPILER_NODE, node)
 
       @module_to_node[module_] = node
       @created_modules << module_
@@ -125,13 +100,6 @@ module RUML
 
       log { "}" }
     end
-
-    META_TO_MODULE_CLASS = {
-      package: "module",
-      namespace: "module",
-      class: "class",
-      root: nil,
-    }.freeze
 
     def compile_namespace_2 node
       # binding.pry if node.name == "C4"
@@ -142,29 +110,7 @@ module RUML
     end
 
     def _compile_generalization node
-      node_path = node._.full_path_str
-      parent = node.namespace
-
-      node.generalization ||= []
-      generals = node.generalization.map(&:general)
-      generals.map!{|g| parent._._find(g)._.full_path_str}
-
-      lines = []
-      if node._.isAbstract
-        lines << "#{node_path}.include(::RUML::Core::Runtime::Uninstantiatable)"
-      else
-        lines << "#{node_path}.include(::RUML::Core::Runtime::Instantiable)"
-      end
-      node._.superClass_remaining.each do | super_ |
-        gem_path = parent._.find(super_)._.full_path_str
-        lines << "#{node_path}.include(#{gen_path}::RUML_InstanceBehavior)"
-      end
-      generals.each do | gen_path |
-        lines << "#{node_path}.include(#{gen_path}::RUML_InstanceBehavior)"
-      end
-      lines << "#{node_path}.include(#{node_path}::RUML_InstanceBehavior)"
-      lines << "#{node_path}.extend(#{node_path}::RUML_ModuleBehavior)"
-
+      lines = @code_generator.new.emit_generalization(node)
       node_eval(node, lines)
     end
 
@@ -190,7 +136,7 @@ module RUML
       parent = node.namespace
       dst = node._.ruby_module
       node.args.flatten.each do | name |
-        src = lookup_node(parent, name).ruby_module
+        src = lookup_node(parent, name)._.ruby_module
         src.constants.each do | n |
           v = x.const_get(n)
           dst.const_set(n, v)
@@ -206,9 +152,9 @@ module RUML
 
     def compile_property_2 node
       node.type = lookup_node(node.namespace, node.type)
-      result = @code_generator.generate_property(node)
+      code = @code_generator.new.emit_property(node).to_s
       # binding.pry
-      node_module_eval(node, result[:code], node.class._.ruby_module_instance)
+      node_module_eval(node, code, node.class._.ruby_module_instance)
     end
 
     def compile_association_2 node
@@ -298,17 +244,10 @@ DESC
     end
 
     def lookup_node node, ident
-      return ident if AST::Node === ident
-      if ::Module === ident and x = @module_to_node[ident]
+      if ::Module === ident and (x = @module_to_node[ident])
         return x
       end
-      ident = ident.to_s
-      while node
-        if found = node._.find(ident)
-          return found
-        end
-        node = node.namespace
-      end
+      node._.lookup_node(ident)
     end
 
     def lookup_module ident, fail_if_not_found=false
