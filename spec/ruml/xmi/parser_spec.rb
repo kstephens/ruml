@@ -4,6 +4,9 @@ require 'tempfile'
 require 'ruml/xmi/parser'
 
 describe RUML::XMI::Parser do
+  subject do
+    described_class.new.tap{|o| o.logger.close }
+  end
   it 'resolves repeated references to the same object without duplicating associations' do
     xml = <<~XML
       <xmi:XMI xmlns:xmi="http://www.omg.org/spec/XMI/20131001">
@@ -21,7 +24,7 @@ describe RUML::XMI::Parser do
       file.write(xml)
       file.flush
 
-      root = described_class.new.call(file.path)
+      root = subject.call(file.path)
       model = root._xmi.associations[:model].first
       klass = model._xmi.associations[:ownedMember].first
       attributes = klass._xmi.associations[:ownedAttribute]
