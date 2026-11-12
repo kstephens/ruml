@@ -29,12 +29,20 @@ module RUML
       @current_stack = [ ]
       @module_to_node = { }
       @pass = 1
-      @code_generator = RUML::Compiler::Target::Ruby
+      @code_generator = RUML::Compiler::Target::Ruby.new
       raise ArgumentError, ":target not a Module : #{@target.inspect}" unless Module === @target
     end
 
     def run node
       compile(node)
+      eval_code(@code_generator.to_s)
+    end
+
+    def eval_code(code)
+      ::Kernel.eval(code)
+    rescue
+      puts code; binding.pry
+      raise
     end
 
     def compile node
@@ -80,21 +88,7 @@ module RUML
       )
       log { "#{full_path_str} { " }
 
-      lines = @code_generator.new.emit_namespace(node).to_s
-      module_ = node_eval(node, lines)
-      node._.ruby_module = module_
-      node._.ruby_module_instance = module_.const_get("RUML_InstanceBehavior")
-      node._.ruby_module_module = module_.const_get("RUML_ModuleBehavior")
-      node._.ruby_include&.each do | m |
-        module_.include(m)
-      end
-      node._.ruby_extend&.each do | m |
-        module_.extend(m)
-      end
-      # target.const_set(:RUML_COMPILER_NODE, node)
-
-      @module_to_node[module_] = node
-      @created_modules << module_
+      @code_generator.emit_namespace(node)
 
       _compile_ownedElement(node)
 
@@ -110,39 +104,19 @@ module RUML
     end
 
     def _compile_generalization node
-      lines = @code_generator.new.emit_generalization(node)
-      node_eval(node, lines)
+      @code_generator.emit_generalization(node)
     end
 
     def compile_operation_2 node
-      name = node.name.to_sym
-      parent = node.namespace
-      target = node._.isStatic ? parent._.ruby_module_module : parent._.ruby_module_instance
-      # binding.pry if node.name == "unlimited"
-      node_define_method(parent, target, name, node._.blk)
+      @code_generator.emit_operation(node)
     end
 
     def compile_constant_2 node
-      name = node.name.to_sym
-      target = node.namespace._.ruby_module
-      return if target.constants.include?(name)
-      val = args[1]
-      val = target.instance_eval(&node.blk) if node.blk
-      log { "  constant #{node.name.inspect} = #{node.val.inspect}" }
-      node_const_set(node.namespace, target, name, val)
+      @code_generator.emit_constant(node)
     end
 
     def compile_import_2 node
-      parent = node.namespace
-      dst = node._.ruby_module
-      node.args.flatten.each do | name |
-        src = lookup_node(parent, name)._.ruby_module
-        src.constants.each do | n |
-          v = x.const_get(n)
-          dst.const_set(n, v)
-          log { "  import #{dst}::#{n} = #{x}::#{n}" }
-        end
-      end
+      @code_generator.emit_import(node)
     end
 
     def compile_stereotype_2 node
@@ -151,10 +125,7 @@ module RUML
     end
 
     def compile_property_2 node
-      node.type = lookup_node(node.namespace, node.type)
-      code = @code_generator.new.emit_property(node).to_s
-      # binding.pry
-      node_module_eval(node, code, node.class._.ruby_module_instance)
+      @code_generator.emit_property(node)
     end
 
     def compile_association_2 node
@@ -162,7 +133,7 @@ module RUML
       owner = node.namespace
       args[1] = lookup_node(owner, args[1])._.full_path_str
       args[5] = lookup_node(owner, args[5])._.full_path_str
-      @code_generator.generate_association(target, *args)
+      @code_generator.emit_association(target, *args)
     end
 
     ######################################################
@@ -193,80 +164,6 @@ module RUML
       ensure
         @current = @current_stack.pop
       end
-    end
-
-    def node_const_set(node, target, name, value)
-      getter = lambda { value }
-      name_upper = name.to_s.upper.to_sym
-      expr = node_code(node, "#{node._.full_path_str}.const_set(#{name_upper.inspect}, #{value.inspect})")
-      target.const_set(name_upper, value)
-      node_define_method(node, target, name, getter)
-    end
-
-    def node_define_method(node, target, name, blk)
-      log { "node_define_method : def #{node._}.#{name}(...)"}
-      blk_source = blk.source.sub(/\A.*?(?=\bdo\b|\{)/m, "")
-      expr = node_code(node, "#{target}.define_method(#{name.inspect}) #{blk_source}\n")
-      target.define_method(name, &blk)
-    end
-
-    def node_module_eval(node, expr, mod)
-      expr = node_code(node, expr)
-      mod.module_eval(expr)
-    rescue => e
-      # binding.pry
-      raise Error, "#{e.inspect} : in \n#{expr}"
-    end
-
-    def node_eval(node, expr)
-      log { "node_eval : #{node.inspect}" }
-      expr = node_code(node, expr)
-      ::Kernel.eval(expr)
-    rescue => e
-      # binding.pry
-      raise Error, "#{e.inspect} : in \n#{expr}"
-    end
-
-    def node_code(node, expr)
-      if ::Array === expr
-        expr = expr.map(&:to_s).join("\n")
-      end
-      expr = <<"DESC"
-
-# #########################################
-# #{node.inspect}
-#{expr}
-# #########################################
-
-DESC
-      log { expr }
-      expr
-    end
-
-    def lookup_node node, ident
-      if ::Module === ident and (x = @module_to_node[ident])
-        return x
-      end
-      node._.lookup_node(ident)
-    end
-
-    def lookup_module ident, fail_if_not_found=false
-      if ::Module === ident
-        ident
-      elsif AST::Node === ident && ident._.ruby_module
-        ident._.ruby_module
-      else
-        path = ident.to_s.split("::")
-        path.inject(::Object) do | mod, name |
-          name = name.to_sym
-          return if fail_if_not_found && ! mod.const_defined?(name)
-          mod.const_get(name)
-        end
-      end
-    end
-
-    def namespace_str path
-      path.map(&:name).compact.map!(&:to_s).join("::")
     end
 
     def _log_prefix ; "pass #{pass}" ; end

@@ -3,6 +3,7 @@
 require 'ruml/compiler/target'
 require 'ruml/support/initialize'
 require 'method_source'
+require 'ripper'
 
 module RUML::Compiler
   class Target::Ruby < Target
@@ -46,9 +47,28 @@ module RUML::Compiler
       lines << "    target.include(RUML_InstanceBehavior)"
       lines << "    target.extend(RUML_ModuleBehavior)"
       lines << "  end"
+      node._.ruby_include&.each do | m |
+        lines << "  include #{m}"
+      end
+      node._.ruby_extend&.each do | m |
+        lines << "  extend #{m}"
+      end
       lines << "  self"
       lines << "end"
       lines << ""
+      self << lines
+    end
+
+    def emit_import node
+      parent = node.namespace
+      dst = node._.full_path_str
+      lines = []
+      node.args.flatten.each do | name |
+        src = parent._.lookup_node(name)._.full_path_str
+        lines << "#{src}.constants do | n |"
+        lines << "  #{dst}.const_set(n, #{src}.const_get(n))"
+        lines << "end"
+      end
       self << lines
     end
 
@@ -78,17 +98,35 @@ module RUML::Compiler
 
     def emit_operation(node)
       name = node.name.to_sym
+      body = node.body
       if ! body && node._.blk
-        body = node._.blk.source.sub(/\A.*?(?=\bdo\b|\{)/m, "")
+        body = extract_method_body(node._.blk.source.to_s)
       end
       self << "module " << full_path_module(node) << "\n"
-      self << node._.isStatic ? parent._.full_path_module_behavior : parent._.full_path_instance_behavior << "\n"
       self << <<"RUBY"
 def #{name}
   #{body}
 end
 RUBY
       self << "end\n"
+    end
+
+    # Returns the body of the first do...end or {...} block in +code+,
+    # without the block parameters or any trailing text after the block.
+    def extract_method_body(code)
+      opener_end = nil
+      offset = 0
+      Ripper.lex(code).each do | (_pos, type, tok, _state) |
+        start = offset
+        offset += tok.length
+        opener_end ||= offset if (type == :on_kw && tok == "do") || type == :on_lbrace
+        next unless opener_end && start >= opener_end
+        next unless (type == :on_kw && tok == "end") || type == :on_rbrace
+        next unless Ripper.sexp(code[0, offset])
+        body = code[opener_end...start].sub(/\A\s*\|[^|]*\|/, "")
+        return body.sub(/\A[\s;]+/, "").sub(/[\s;]+\z/, "")
+      end
+      raise ArgumentError, "no block found in #{code.inspect}"
     end
 
     def emit_constant(node)
