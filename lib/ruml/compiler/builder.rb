@@ -4,6 +4,7 @@ require 'ruml'
 require 'ruml/core/runtime'
 require 'ruml/compiler'
 require 'ruml/support/navigable'
+require 'ruml/support/basic_object'
 require 'ruml/compiler/ast'
 require 'ruml/support/logging'
 require 'ruml/support/context'
@@ -16,7 +17,7 @@ module RUML
     include Support::Logging
     attr_reader :created, :root, :contexts
 
-    include Compiler::AST::Repr, Support::Logging
+    include Support::BasicObject::Repr, Support::Logging
     def _repr ; @contexts.node ; end
 
     def initialize opts = nil, &blk
