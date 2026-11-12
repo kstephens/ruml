@@ -22,11 +22,11 @@ module RUML::Boot
     attr_accessor :id
     @@id_next = 0
 
-    def initialize(**properities)
-      @_properities = {}
+    def initialize(**properties)
+      @_properties = {}
       @_operations = {}
-      properities.each do | k, v |
-        @_properities[k] = v
+      properties.each do | k, v |
+        @_properties[k] = v
       end
     end
 
@@ -38,7 +38,7 @@ module RUML::Boot
       raise Error, "{sel} : cannot take block" if block_given?
       case
       when args.empty?
-        @_properities[sel]
+        @_properties[sel]
       when sel.to_s[-1] == "="
         @_properties[sel] = args[0]
       else
@@ -86,7 +86,7 @@ module RUML::Boot
     end
 
     module Common
-      class ReflextiveCollection
+      class ReflectiveCollection
         # !RUBY
         include ::Enumerable
 
@@ -130,7 +130,7 @@ module RUML::Boot
         end
       end
 
-      class ReflectiveSequence < ReflextiveCollection
+      class ReflectiveSequence < ReflectiveCollection
         # add(index: Integer, object: Object)
         # add(object: Object)
         def add(index:, object:)
@@ -160,20 +160,20 @@ module RUML::Boot
     module Reflection
       class Object < Base
         def get(property:)
-          @properities[property]
+          @properties[property]
         end
         def equals(element:) # : Boolean{query}
           element.equals?(self)
         end
         def set(property:, value:) # : Object{query}
-          @properities[property] = value
+          @properties[property] = value
           self
         end
         def isSet(property:) # : Boolean{query}
-          @properities.key?(property)
+          @properties.key?(property)
         end
         def unset(property:) #
-          @properities.delete(property)
+          @properties.delete(property)
         end
         def invoke(op:, arguments:) # : Object [0..1]
           @operations[op]._invoke(op, arguments)
