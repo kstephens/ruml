@@ -7,6 +7,7 @@ require 'ruml/support/navigable'
 require 'ruml/compiler/ast'
 require 'ruml/support/logging'
 require 'ruml/support/context'
+require 'ruml/compiler/frontend'
 
 module RUML
 
@@ -257,7 +258,7 @@ RUBY
 
     def _compile(opts = { })
       opts = @opts.merge(opts)
-      c = Compiler::Compiler.new(opts)
+      c = Compiler::Frontend.new(opts)
       # binding.pry
       c.run(@root)
       c

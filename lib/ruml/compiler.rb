@@ -6,6 +6,3 @@ module RUML
     class CompilerError < StandardError; end
   end
 end
-
-require 'ruml/compiler/ast'
-require 'ruml/compiler/frontend'

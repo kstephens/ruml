@@ -9,8 +9,8 @@ require 'method_source'
 
 module RUML
   module Compiler
-  class Compiler
-    class Error < StandardError ; end
+  class Frontend
+    class Error < CompilerError ; end
     include RUML::Support::Logging::Basic
     EMPTY_ARRAY = [ ].freeze unless defined? EMPTY_ARRAY
 

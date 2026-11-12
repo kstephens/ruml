@@ -2,8 +2,6 @@
 
 require 'ruml'
 require 'ruml/core/runtime'
-require 'rational'
-require 'complex'
 
 module RUML
   module Core
