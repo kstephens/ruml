@@ -19,7 +19,6 @@ module RUML::Boot
   end
 
   class Base
-    attr_accessor :id
     @@id_next = 0
 
     def initialize(**properties)
@@ -35,7 +34,7 @@ module RUML::Boot
     end
 
     def method_missing sel, *args
-      raise Error, "{sel} : cannot take block" if block_given?
+      raise Error, "#{sel} : cannot take block" if block_given?
       case
       when args.empty?
         @_properties[sel]
@@ -47,116 +46,7 @@ module RUML::Boot
     end
   end
 
-  module UML
-    class Element < Base
-    end
-    class NamedElement < Element
-    end
-    class PackageableElement < Element
-    end
-    class Namespace < NamedElement
-    end
-    class Package < Namespace
-    end
-    class Type < PackageableElement
-      # conformsTo(other:) # : Boolean{query}
-      def conformsTo(other:)
-        raise NotImplementedError, "conformsTo(other:)"
-      end
-    end
-    class Classifier < Type
-    end
-    class Class < Classifer
-    end
-    class Property < Base
-    end
-  end
-
   module MOF
-    module Extension
-      class Tag
-        attr_accessor :name, :value, :elements, :owner
-        def initialize(name:, value:, owner:)
-          @name = name
-          @value = value
-          @elements = []
-          @owner = owner
-        end
-      end
-    end
-
-    module Common
-      class ReflectiveCollection
-        # !RUBY
-        include ::Enumerable
-
-        def initialize
-          @_objects = []
-        end
-        # add(object: Object): Boolean
-        def add(object:) # : Boolean
-          @_objects.push(object)
-          true # !!!
-        end
-        # addAll(elements: ReflectiveSequence): Boolean
-        def addAll(elements:)
-          result = false
-          elements.each do | x |
-            # !!! check if object already exists?
-            @_objects.push(x)
-            result = true # !!!
-          end
-          result
-        end
-        # clear()
-        def clear()
-          @_objects.empty
-          nil
-        end
-        # remove(object: Object): Boolean
-        def remove(object:)
-          result = @_objects.include?(object)
-          @_objects.delete(object)
-          result
-        end
-        # size(): Integer
-        def size()
-          @_objects.size
-        end
-
-        # !RUBY
-        def each &block_given
-          @_objects.each(&blk)
-        end
-      end
-
-      class ReflectiveSequence < ReflectiveCollection
-        # add(index: Integer, object: Object)
-        # add(object: Object)
-        def add(index:, object:)
-          current = @_objects[index]
-          @_objects.insert(index, object)
-          current
-        end
-        # get(index: Integer): Object
-        def get(index:)
-          @_objects[index]
-        end
-        # remove(index: Integer): Object
-        def remove(index:)
-          current = _objects[index]
-          @_objects.delete_at(index)
-          current
-        end
-        # set(index: Integer, object: Object): Object
-        def set(index:, object:)
-          current = @_objects[index]
-          @_objects[index] = object
-          current
-        end
-      end
-    end
-
     module Reflection
       class Object < Base
         def get(property:)
@@ -210,9 +100,6 @@ module RUML::Boot
       end
 
 
-        def isInstanceOfType(type:, includesSubtypes:) # : Boolean{query}
-          raise NotImplementedError("isInstanceOfType")
-        end
 
       class Type
         # isInstance(object: Object) : Boolean{query}
@@ -220,6 +107,132 @@ module RUML::Boot
           raise NotImplementedError("isInstance")
         end
       end
+    end
+
+    module Identifiers
+      class Extent < Reflection::Object
+
+      end
+      class URLExtent < Extent
+
+      end
+    end
+    module Common
+      class ReflectiveCollection < Reflection::Object
+        # !RUBY
+        include ::Enumerable
+
+        def initialize
+          super()
+          @_objects = []
+        end
+        # add(object: Object): Boolean
+        def add(object:) # : Boolean
+          @_objects.push(object)
+          true # !!!
+        end
+        # addAll(elements: ReflectiveSequence): Boolean
+        def addAll(elements:)
+          result = false
+          elements.each do | x |
+            # !!! check if object already exists?
+            @_objects.push(x)
+            result = true # !!!
+          end
+          result
+        end
+        # clear()
+        def clear()
+          @_objects.empty
+          nil
+        end
+        # remove(object: Object): Boolean
+        def remove(object:)
+          result = @_objects.include?(object)
+          @_objects.delete(object)
+          result
+        end
+        # size(): Integer
+        def size()
+          @_objects.size
+        end
+
+        # !RUBY
+        def each &blk
+          @_objects.each(&blk)
+        end
+      end
+
+      class ReflectiveSequence < ReflectiveCollection
+        # add(index: Integer, object: Object)
+        # add(object: Object)
+        def add(index:, object:)
+          current = @_objects[index]
+          @_objects.insert(index, object)
+          current
+        end
+        # get(index: Integer): Object
+        def get(index:)
+          @_objects[index]
+        end
+        # remove(index: Integer): Object
+        def remove(index:)
+          current = _objects[index]
+          @_objects.delete_at(index)
+          current
+        end
+        # set(index: Integer, object: Object): Object
+        def set(index:, object:)
+          current = @_objects[index]
+          @_objects[index] = object
+          current
+        end
+      end
+    end
+
+    module Extension
+      class Tag < Reflection::Element
+        attr_accessor :name, :value, :element
+        def initialize(name:, value:)
+          super()
+          @name = name
+          @value = value
+          @element = []
+        end
+        def getMetaClass # : Class {query}
+        end
+        def container() # : Element {query}
+        end
+        def isInstanceOfType(type:, includesSubtypes:) # : Boolean{query}
+          raise NotImplementedError("isInstanceOfType")
+        end
+      end
+    end
+  end
+
+  module UML
+    class Element < Base
+    end
+    class NamedElement < Element
+    end
+    class PackageableElement < Element
+    end
+    class Namespace < NamedElement
+    end
+    class Package < Namespace
+    end
+    class Type < PackageableElement
+      # conformsTo(other:) # : Boolean{query}
+      def conformsTo(other:)
+        raise NotImplementedError, "conformsTo(other:)"
+      end
+    end
+    class Classifier < Type
+    end
+    class Class < Classifer
+    end
+    class Property < Base
+      attr_accessor :isID # : Boolean = false
     end
   end
 end
