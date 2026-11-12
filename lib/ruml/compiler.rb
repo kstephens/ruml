@@ -8,4 +8,4 @@ module RUML
 end
 
 require 'ruml/compiler/ast'
-require 'ruml/compiler/compiler'
+require 'ruml/compiler/frontend'

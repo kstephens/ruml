@@ -3,7 +3,7 @@
 require 'ruml'
 require 'ruml/support'
 require 'ruml/core/runtime'
-require 'ruml/logging'
+require 'ruml/support/logging'
 require 'ruml/compiler/ast'
 require 'rmof/code_generator'
 require 'method_source'

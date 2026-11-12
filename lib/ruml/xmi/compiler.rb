@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 require 'ruml/xmi/resolver'
-require 'ruml/traverser'
+require 'ruml/support/traverser'
 require 'method_source'
 
 module RUML
   module XMI
     class Compiler
-      include RUML::TraverserMethods
+      include RUML::Support::TraverserMethods
       attr_accessor :resolver
 
       def initialize out=$stdout

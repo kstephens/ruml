@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'ruml/support'
+require 'ruml/support/initialize'
 
 describe RUML::Support::Initialize do
   let(:klass) do

@@ -2,14 +2,14 @@
 
 require 'ruml/xmi'
 require 'ruml/xmi/introspection'
-require 'ruml/traverser'
-require 'ruml/logging'
+require 'ruml/support/traverser'
+require 'ruml/support/logging'
 
 module RUML
   module XMI
     class Resolver
-      include RUML::Logging::Basic
-      include RUML::TraverserMethods
+      include RUML::Support::Logging::Basic
+      include RUML::Support::TraverserMethods
 
       def initialize
         @i = Introspection.new

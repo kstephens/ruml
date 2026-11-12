@@ -4,7 +4,7 @@ require 'rmof'
 require 'ruml/xmi'
 require 'ruml/xmi/factory'
 require 'ruml/xmi/resolver'
-require 'ruml/logging'
+require 'ruml/support/logging'
 require 'nokogiri'
 require 'uri'
 require 'faraday'
@@ -12,7 +12,7 @@ require 'faraday'
 module RUML
   module XMI
     class Parser
-      include RUML::Logging::Basic
+      include RUML::Support::Logging::Basic
       attr_accessor :parsers
       attr_reader :factory
       attr_accessor :error, :error_elems

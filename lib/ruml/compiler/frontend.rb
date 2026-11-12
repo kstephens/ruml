@@ -2,7 +2,7 @@
 
 require 'ruml'
 require 'ruml/core/runtime'
-require 'ruml/logging'
+require 'ruml/support/logging'
 require 'ruml/compiler/ast'
 require 'ruml/compiler/target/ruby'
 require 'method_source'
@@ -11,7 +11,7 @@ module RUML
   module Compiler
   class Compiler
     class Error < StandardError ; end
-    include RUML::Logging::Basic
+    include RUML::Support::Logging::Basic
     EMPTY_ARRAY = [ ].freeze unless defined? EMPTY_ARRAY
 
     # Inputs:

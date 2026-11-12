@@ -9,4 +9,4 @@ module RUML
 end
 
 require 'ruml/core/runtime'
-require 'ruml/extensions'
+require 'ruml/support/extensions'

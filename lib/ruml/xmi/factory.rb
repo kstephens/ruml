@@ -2,7 +2,7 @@
 
 require 'rmof'
 require 'logger'
-require 'ruml/logging'
+require 'ruml/support/logging'
 
 module RMOF
   module Boolean; end
@@ -13,7 +13,7 @@ end
 module RUML
   module XMI
     class Factory
-      include RUML::Logging::Basic
+      include RUML::Support::Logging::Basic
 
       attr_reader :root, :classes, :objects
 

@@ -3,19 +3,19 @@
 require 'ruml'
 require 'ruml/core/runtime'
 require 'ruml/compiler'
-require 'ruml/navigable'
+require 'ruml/support/navigable'
 require 'ruml/compiler/ast'
-require 'ruml/logging'
+require 'ruml/support/logging'
 require 'ruml/support/context'
 
 module RUML
 
   # Understands a small DSL for UML modeled in subset of UML Substructure.
   class Builder
-    include Logging
+    include Support::Logging
     attr_reader :created, :root, :contexts
 
-    include Compiler::AST::Repr, Logging
+    include Compiler::AST::Repr, Support::Logging
     def _repr ; @contexts.node ; end
 
     def initialize opts = nil, &blk
