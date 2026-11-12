@@ -14,32 +14,29 @@ module RUML
     include RUML::Support::Logging::Basic
     EMPTY_ARRAY = [ ].freeze unless defined? EMPTY_ARRAY
 
-    # Inputs:
-    attr_reader :target, :pass
-
-    # Outputs:
-    attr_reader :created_modules, :module_to_node
+    attr_reader :root_namespace, :pass
+    attr_accessor :target, :target
 
     def initialize opts = nil, &blk
       opts ||= { } # EMPTY_HASH
       @opts = opts
       @created_modules = [ ]
-      @target = opts[:target]
+      @root_namespace = (opts[:root_namespace] || "").to_s
+      @target = opts.fetch(:target)
+      @target = RUML::Compiler::Target.const_get(@target) if ::Symbol === @target
+      @target = @target.new unless RUML::Compiler::Target === @target
       @current = nil
       @current_stack = [ ]
-      @module_to_node = { }
       @pass = 1
-      @code_generator = RUML::Compiler::Target::Ruby.new
-      raise ArgumentError, ":target not a Module : #{@target.inspect}" unless Module === @target
     end
 
     def run node
       compile(node)
-      eval_code(@code_generator.to_s)
     end
 
-    def eval_code(code)
-      ::Kernel.eval(code)
+    def eval_code()
+      ::Kernel.eval(@target.to_s)
+      self
     rescue
       puts code; binding.pry
       raise
@@ -79,16 +76,16 @@ module RUML
     def compile_namespace_1 node
       path = node._.namespace_path
       node_path_str = path.map(&:name).compact.join("::")
-      full_path_str = @target.to_s + "::" + node_path_str
+      full_path_str = @root_namespace.to_s + "::" + node_path_str
       node._.to_h.update(
         path: path,
         node_path_str: node_path_str,
         full_path_str: full_path_str,
-        root_package: @target.to_s,
+        root_package: @root_namespace.to_s,
       )
       log { "#{full_path_str} { " }
 
-      @code_generator.emit_namespace(node)
+      @target.emit_namespace(node)
 
       _compile_ownedElement(node)
 
@@ -96,7 +93,6 @@ module RUML
     end
 
     def compile_namespace_2 node
-      # binding.pry if node.name == "C4"
       _compile_ownedElement node
       _compile_children node, :stereotype, :import
       _compile_generalization node
@@ -104,36 +100,35 @@ module RUML
     end
 
     def _compile_generalization node
-      @code_generator.emit_generalization(node)
+      @target.emit_generalization(node)
     end
 
     def compile_operation_2 node
-      @code_generator.emit_operation(node)
+      @target.emit_operation(node)
     end
 
     def compile_constant_2 node
-      @code_generator.emit_constant(node)
+      @target.emit_constant(node)
     end
 
     def compile_import_2 node
-      @code_generator.emit_import(node)
+      @target.emit_import(node)
     end
 
     def compile_stereotype_2 node
       args = node._.args
-      # @target.stereotype *args
     end
 
     def compile_property_2 node
-      @code_generator.emit_property(node)
+      @target.emit_property(node)
     end
 
     def compile_association_2 node
       args = node._.args
       owner = node.namespace
-      args[1] = lookup_node(owner, args[1])._.full_path_str
-      args[5] = lookup_node(owner, args[5])._.full_path_str
-      @code_generator.emit_association(target, *args)
+      args[1] = owner._.lookup_node(args[1])._.full_path_str
+      args[5] = owner._.lookup_node(args[5])._.full_path_str
+      @target.emit_association(:NOT_IMPLEMENTED, *args)
     end
 
     ######################################################

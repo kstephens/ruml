@@ -18,4 +18,3 @@ describe RUML::Compiler::Target::Ruby do
     end
   end
 end
-

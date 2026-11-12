@@ -9,7 +9,7 @@ describe "Builder" do
 
   m = RUML::Spec::MM
 
-  b = RUML::Compiler::Builder.new(target: m) do
+  b = RUML::Compiler::Builder.new(root_namespace: m) do
     package :P1 do
       package :P2 do
         class_ :C1 do
@@ -50,7 +50,7 @@ describe "Builder" do
 
   # pp b.created.map { | ast | [ :path, ast[:path], :ast, ast ] }
 
-  b._compile(:verbose => 9)
+  b._compile(verbose: 9, target: :Ruby).eval_code()
 
   inst = ::RUML::Core::Runtime::Instantiable
   uninst = ::RUML::Core::Runtime::Uninstantiatable
