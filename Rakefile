@@ -16,6 +16,11 @@ end
 
 task :test => [ :test_spec ]
 
+require 'rubocop/rake_task'
+desc "Run RuboCop."
+RuboCop::RakeTask.new(:rubocop)
+
+
 begin
   require 'rcov/rcovtask'
   Rcov::RcovTask.new do |test|

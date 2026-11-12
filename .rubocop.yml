@@ -1,0 +1,24 @@
+AllCops:
+  NewCops: disable
+  SuggestExtensions: false
+  Exclude:
+    - 'vendor/**/*'
+    - 'pkg/**/*'
+    - 'tmp/**/*'
+
+# The existing code uses its own layout and naming conventions, so these
+# cops are disabled rather than reformatting the whole codebase.
+Layout:
+  Enabled: false
+
+Style:
+  Enabled: false
+
+Naming:
+  Enabled: false
+
+Metrics:
+  Enabled: false
+
+Gemspec:
+  Enabled: false
