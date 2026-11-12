@@ -4,7 +4,7 @@ require 'ruml'
 require 'ruml/core/runtime'
 require 'ruml/logging'
 require 'ruml/compiler/ast'
-require 'rmof/code_generator'
+require 'ruml/compiler/target/ruby'
 require 'method_source'
 
 module RUML
@@ -29,7 +29,7 @@ module RUML
       @current_stack = [ ]
       @module_to_node = { }
       @pass = 1
-      @code_generator = ::RMOF::CodeGenerator.new
+      @code_generator = RUML::Compiler::Target::Ruby.new
       raise ArgumentError, ":target not a Module : #{@target.inspect}" unless Module === @target
     end
 

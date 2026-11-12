@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-module RMOF
-  class CodeGenerator
+module RUML::Compiler::Target
+  class Ruby
     def initialize opts={}
       @opts = opts.dup
     end
