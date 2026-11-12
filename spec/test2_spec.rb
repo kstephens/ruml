@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-require 'ruml/builder'
+require 'ruml/compiler/builder'
 
 describe "Builder" do
   it "builds and compiles to Ruby" do
 
   module MM; end
 
-  b = RUML::Builder.new(target: MM) do | b |
+  b = RUML::Compiler::Builder.new(target: MM) do | b |
     package :P1 do
       package :P2 do
         class_ :C1 do

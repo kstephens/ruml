@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'ruml/core/runtime'
-require 'ruml/builder'
+require 'ruml/compiler/builder'
 
 module RUML
   UNLIMITED = 12345678901234567890
@@ -17,7 +17,7 @@ module RUML
 
   module UML2
 
-    RUML::Builder.new(target: self) do
+    RUML::Compiler::Builder.new(target: self) do
       package :Core do
         package :PrimitiveTypes do
           class_ :Boolean do

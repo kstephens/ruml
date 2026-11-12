@@ -11,7 +11,7 @@ require 'ruml/support/context'
 module RUML
 
   # Understands a small DSL for UML modeled in subset of UML Substructure.
-  class Builder
+  class Compiler::Builder
     include Support::Logging
     attr_reader :created, :root, :contexts
 
