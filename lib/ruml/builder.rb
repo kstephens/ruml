@@ -6,7 +6,7 @@ require 'ruml/compiler'
 require 'ruml/navigable'
 require 'ruml/compiler/ast'
 require 'ruml/logging'
-require 'ruml/context'
+require 'ruml/support/context'
 
 module RUML
 

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'ruml/context'
+require 'ruml/support/context'
 
 module RUML
   module Compiler
@@ -189,7 +189,7 @@ module RUML
     class Printer
       def initialize opts = {}
         @out = opts[:out] || $stdout
-        @context = ::RUML::Context.new(:printer)
+        @context = ::RUML::Support::Context.new(:printer)
       end
 
       def call node
