@@ -99,8 +99,6 @@ module RUML::Boot
         end
       end
 
-
-
       class Type
         # isInstance(object: Object) : Boolean{query}
         def isInstance(object:) # : Boolean{query}
