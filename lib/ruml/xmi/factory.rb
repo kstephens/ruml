@@ -38,13 +38,13 @@ module RUML
         cls = get_class(xmlns, name)
         obj = cls.new
         register_object(obj)
-        obj._xmi.metatype = cls._xmi
+        obj._.metatype = cls._
         properties&.each do | name, value |
           obj.__send__(:"#{name}=", value)
         end
         @id_to_object[id] = obj if id
         @objects << obj
-        logger.info "make_instance : #{xmlns.inspect} : #{name.inspect} : #{properties.inspect} : #{id.inspect} => #{cls} @ #{obj._xmi.object_id}"
+        logger.info "make_instance : #{xmlns.inspect} : #{name.inspect} : #{properties.inspect} : #{id.inspect} => #{cls} @ #{obj._.object_id}"
         obj
       end
 
@@ -60,9 +60,9 @@ module RUML
         cls = ::Class.new(Instance)
         cls.extend(ClassAttributes)
         register_object(cls)
-        cls._xmi.xmlns = xmlns
-        cls._xmi.name = name_sym
-        cls._xmi.ident = "#{xmlns}:#{name}"
+        cls._.xmlns = xmlns
+        cls._.name = name_sym
+        cls._.ident = "#{xmlns}:#{name}"
         mod.const_set(name_sym, cls)
         @classes << cls
         @get_class[key] = cls
@@ -77,16 +77,16 @@ module RUML
       end
 
       def register_object obj
-        obj._xmi.object_id = (@object_id += 1)
-        @object_id_to_object[obj._xmi.object_id] = obj
+        obj._.object_id = (@object_id += 1)
+        @object_id_to_object[obj._.object_id] = obj
         obj
       end
 
       def associate(memberEnd1, name, memberEnd2)
-        outgoing = memberEnd1._xmi.associations[name]
+        outgoing = memberEnd1._.associations[name]
         raise unless memberEnd2
         outgoing.push(memberEnd2).uniq!(&:__id__) if memberEnd2
-        logger.debug { "  associations: #{memberEnd1._xmi.associations.keys.inspect}" }
+        logger.debug { "  associations: #{memberEnd1._.associations.keys.inspect}" }
       end
 
       def get_object(search)
@@ -115,19 +115,18 @@ module RUML
 
     # Mixin that provides basic Property and Association support.
     module BaseAttributes
-      def _xmi ; @_xmi ||= Attributes.new(self) ; end
-      alias_method :_, :_xmi
+      def _ ; @_ ||= Attributes.new(self) ; end
       def method_missing sel, *args, &blk
-        _xmi.do_method_missing(sel, args, blk)
+        _.do_method_missing(sel, args, blk)
       end
     end
     module ClassAttributes
       include BaseAttributes
-      def inspect ; _xmi.inspect_class ; end
+      def inspect ; _.inspect_class ; end
     end
     class Instance < ::BasicObject
       include BaseAttributes
-      def inspect ; _xmi.inspect_object ; end
+      def inspect ; _.inspect_object ; end
     end
 
     def self.copy_method(dst,dst_name, src_module, src_name = dst_name)

@@ -14,7 +14,7 @@ module RUML
 
       def type_of? obj, type
         cls = get_class(obj)
-        # puts "type_of?(obj=#{obj}, type=#{type}) : #{obj._xmi.type_name.inspect} #{cls}"
+        # puts "type_of?(obj=#{obj}, type=#{type}) : #{obj._.type_name.inspect} #{cls}"
         # binding.pry
         return true if cls.__id__ == type.__id__
         cls_name = cls.name
@@ -25,13 +25,13 @@ module RUML
       end
 
       def get_object_id(obj)
-        obj._xmi.object_id
+        obj._.object_id
       end
       def get_module(elem)
-        elem._xmi.namespace
+        elem._.namespace
       end
       def set_namespace(elem, namespace)
-        elem._xmi.namespace = namespace
+        elem._.namespace = namespace
       end
       def namespaced_name elem
         namespaces(elem.namespace).map{|x| x.name.to_s}.join("::") + "::" + elem.name
@@ -47,13 +47,13 @@ module RUML
       end
 
       def get_package(elem)
-        elem._xmi.package
+        elem._.package
       end
       def set_package(elem, package)
-        elem._xmi.package = package
+        elem._.package = package
       end
       def associations elem
-        elem._xmi.associations.each do | name, objs |
+        elem._.associations.each do | name, objs |
           objs.each do | obj |
             yield name, obj
           end
@@ -61,7 +61,7 @@ module RUML
       end
 
       def recur_associations elem, target, sel
-        associations(elem) do | name, obj |
+        associations(elem) do | _name, obj |
           target.send(sel, obj)
         end
       end
@@ -73,12 +73,12 @@ module RUML
       end
 
       def import_package_element(target, source)
-        log { "import #{e._xmi.type} #{e.name} -> #{target._xmi.type} #{target.name}"}
-        target._xmi.imports.push(source)
+        log { "import #{e._.type} #{e.name} -> #{target._.type} #{target.name}"}
+        target._.imports.push(source)
       end
 
       def get_imports package
-        package._xmi.imports
+        package._.imports
       end
 
       def find_element(package, name)

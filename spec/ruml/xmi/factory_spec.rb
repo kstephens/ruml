@@ -14,7 +14,7 @@ describe RUML::XMI::Factory do
       factory.associate(parent, :ownedAttribute, second)
       factory.associate(parent, :ownedAttribute, first)
 
-      associations = parent._xmi.associations[:ownedAttribute]
+      associations = parent._.associations[:ownedAttribute]
       expect(associations.length).to eq(2)
       expect(associations[0]).to equal(first)
       expect(associations[1]).to equal(second)

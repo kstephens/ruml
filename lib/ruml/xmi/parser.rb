@@ -3,6 +3,7 @@
 require 'rmof'
 require 'ruml/xmi'
 require 'ruml/xmi/factory'
+require 'ruml/xmi/factory2'
 require 'ruml/xmi/resolver'
 require 'ruml/support/logging'
 require 'nokogiri'
@@ -30,7 +31,7 @@ module RUML
           # "https://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi" =>
           # "https://www.omg.org/spec/UML/20161101/PrimitiveTypes.xmi",
         }
-        @factory = factory ||= Factory.new
+        @factory = factory ||= Factory2.new
       end
 
       def call(url)
@@ -56,21 +57,21 @@ module RUML
       end
 
       def fetch_content(url)
-        logger.info "fetch_content #{url.inspect}"
+        log { "fetch_content #{url.inspect}" }
         url = url.sub('http://www.omg.org/', 'https://www.omg.org/')
         url = @redirects[url] || url
         # binding.pry
         if File.exist?(url)
-          logger.info "fetch_content: Reading #{url.inspect}"
+          log { "fetch_content: Reading #{url.inspect}" }
           return File.read(url)
         end
         uri = URI.parse(url)
         local_file = "vendor/#{uri.host}#{uri.path}"
         if File.exist?(local_file)
-          logger.info "fetch_content: Reading #{local_file.inspect} for #{url.inspect}"
+          log { "fetch_content: Reading #{local_file.inspect} for #{url.inspect}" }
           File.read(local_file)
         else
-          logger.info "fetch_content: GET #{url.inspect}"
+          log { "fetch_content: GET #{url.inspect}" }
           response = Faraday.get(url)
           raise ParserError, "GET #{url.inspect} failed : #{response.status}" if response.status != 200
           response.body
@@ -85,7 +86,7 @@ module RUML
         url = URI.parse(href)
         xmi_id, url.fragment = url.fragment, nil
         location = url.to_s
-        logger.info { "find_href(#{href.inspect})" }
+        log { "find_href(#{href.inspect})" }
         logger.debug { "find_href location=#{location.inspect} xmi_id=#{xmi_id.inspect}" }
         dom = load_xml(location)
         logger.debug { "dom.namespaces=#{dom.namespaces.inspect}" }
@@ -108,7 +109,8 @@ module RUML
 
       def initialize top_level
         @top_level = top_level
-        @root = factory.get_class("xmi", "XMI").new
+        # @root = factory.get_class("xmi", "XMI").new
+        @root = factory.make_instance("xmi", "XMI", {})
         @hrefs = {}
         @elem_stack = []
         @target_stack = []
@@ -184,10 +186,14 @@ module RUML
               properties[attr.name] = attr.value
             end
             obj = factory.make_instance(xmi_type_prefix, xmi_type_name, properties, unique_id)
-            obj._xmi.type = xmi_type
-            obj._xmi.id = xmi_id
-            obj._xmi.type_prefix = xmi_type_prefix
-            obj._xmi.type_name = xmi_type_name
+            obj._.type = xmi_type
+            obj._.id = xmi_id
+            obj._.type_prefix = xmi_type_prefix
+            obj._.type_name = xmi_type_name
+            obj._.node_parent = parent
+            parent._.node_children << obj if parent
+            factory.associate(parent, :ownedElement, obj) if parent
+            obj.namespace = parent
             factory.set_source_location(obj, @xmi_url, elem.line)
             @xmi_id_to_object[xmi_id] = obj if xmi_id
             logger.debug { "PROPERTIES : #{properties.inspect}" }

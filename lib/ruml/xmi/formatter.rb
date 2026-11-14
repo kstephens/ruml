@@ -20,7 +20,7 @@ module RUML
       def emit(obj)
         return unless emit_basic(obj)
         # binding.pry if @depth > 10
-        obj._xmi.associations.to_a.sort_by{|(k)| k.to_s}.each do | name, objs |
+        associations(obj).each do | name, objs |
           objs
           .sort_by do | x |
             [! @seen[obj.__id__], (obj.name rescue "")]
@@ -41,8 +41,11 @@ module RUML
       end
 
       def emit_basic(obj)
-        if RUML::XMI::BaseAttributes === obj
-          desc = "#{obj._xmi.kind_name} #{obj._xmi.object_id}"
+        if RUML::Compiler::AST::Node === obj
+          desc = "#{obj._.kind_name} #{obj._.object_id}"
+          id = obj.__id__
+        elsif RUML::XMI::BaseAttributes === obj
+          desc = "#{obj._.kind_name} #{obj._.object_id}"
           id = obj.__id__
         else
           desc = "#{obj.class.name} #{obj.__id__}"
@@ -53,13 +56,25 @@ module RUML
         end
         @seen[obj.__id__] = obj
         write "#{desc}  { \n"
-        obj._xmi.properties.each do | name, value |
+        properties(obj).each do | name, value |
           @indent += 1
           indent; write "#{name}=#{value.inspect} \n"
           @indent -= 1
         end
         indent; write "}\n"
         true
+      end
+
+      def associations node
+        node._.associations.sort.map do | k |
+          [k, node[k]]
+        end.to_h
+      end
+
+      def properties node
+        node._.properties.sort.map do | k |
+          [k, node[k]]
+        end.to_h
       end
 
       def indent m=0

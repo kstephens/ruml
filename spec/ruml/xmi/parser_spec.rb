@@ -25,11 +25,11 @@ describe RUML::XMI::Parser do
       file.flush
 
       root = subject.call(file.path)
-      model = root._xmi.associations[:model].first
-      klass = model._xmi.associations[:ownedMember].first
-      attributes = klass._xmi.associations[:ownedAttribute]
+      model = root.model.first
+      klass = model.ownedMember.first
+      attributes = klass.ownedAttribute
 
-      expect(attributes.map { |attribute| attribute._xmi.id }).to eq(%w[property other])
+      expect(attributes.map { |attribute| attribute._.id }).to eq(%w[property other])
     end
   end
 end

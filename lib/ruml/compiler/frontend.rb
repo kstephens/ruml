@@ -95,11 +95,16 @@ module RUML
     def compile_namespace_2 node
       _compile_ownedElement node
       _compile_children node, :stereotype, :import
-      _compile_generalization node
+      _compile_generalization_2 node
       _compile_children node, :property, :association, :method, :constant
     end
 
-    def _compile_generalization node
+    def compile_namespace_3 node
+      _compile_ownedElement node
+      _compile_children node, :association
+    end
+
+    def _compile_generalization_2 node
       @target.emit_generalization(node)
     end
 
@@ -123,7 +128,8 @@ module RUML
       @target.emit_property(node)
     end
 
-    def compile_association_2 node
+    def compile_association_3 node
+      binding.pry
       args = node._.args
       owner = node.namespace
       args[1] = owner._.lookup_node(args[1])._.full_path_str
