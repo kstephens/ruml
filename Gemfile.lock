@@ -222,6 +222,7 @@ PLATFORMS
 
 DEPENDENCIES
   awesome_print (~> 1.9)
+  binding_of_caller (~> 2.0)
   faraday (~> 2.14)
   guard-rspec (~> 4.7)
   logger (~> 1.7)

@@ -1,6 +1,7 @@
 source "https://rubygems.org"
 
 gem "awesome_print", "~> 1.9"
+gem "binding_of_caller", "~> 2.0"
 gem "faraday", "~> 2.14"
 gem "logger", "~> 1.7"
 gem "mail", "~> 2.9"
@@ -20,4 +21,3 @@ group :development do
   gem "rspec", "~> 3.13"
   gem "rubocop", "~> 1.92"
 end
-
