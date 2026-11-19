@@ -25,7 +25,7 @@ module RUML
       @opts = opts
       @_log_verbose = true # @opts[:verbose]
       @created = [ ]
-      @contexts = ::RUML::Contexts.new
+      @contexts = ::RUML::Support.Contexts.new
       @root = @opts[:root] || _build(:root, [])
       @root.ownedElement = []
       @node_for_module = {}
@@ -77,7 +77,7 @@ RUBY
         node.superClass = [] # : Class[*] #
         supers = args[1..-1]
         supers.map(&:to_s).each do | name |
-          node.superClass << (node.namespace._.find(name) or name)
+          node.superClass << _find_node(node.namespace, name) or name
         end
         _with(node, :classifier) do
           node.isAbstract = false
@@ -103,7 +103,7 @@ RUBY
       args.each do | name |
         name = name.to_s
         gen = _build(:generalization, [])
-        general = specific.namespace._.find(name)
+        general = _find_node(specific.namespace, name)
         # if general is not found, yet, just store the name:
         gen.general = general || name
         gen.specific = specific
@@ -214,8 +214,8 @@ RUBY
         x
       when ::Class
         @node_for_module[x] ||= begin
-          full_path_str = x.to_s
-          name = full_path_str.split("::")[-1]
+          path_str = x.to_s
+          name = path_str.split("::")[-1]
           _build(:class, [name]) do | node |
             node.ownedElement = []
             node._._repr.update(
@@ -224,14 +224,18 @@ RUBY
               ruby_module: x,
               ruby_module_instance: x,
               ruby_module_module: x.class,
-              node_path_str: full_path_str,
-              full_path_str: full_path_str,
+              path_str: path_str,
             )
           end
         end
       else
         raise "_to_class"
       end
+    end
+
+    def _find_node(node, name)
+      return name if ::RUML::Compiler::AST::Node === name
+      node.namespace._.find_node(name)
     end
 
     def _name arg

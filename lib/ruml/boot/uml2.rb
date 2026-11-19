@@ -3,7 +3,7 @@
 require 'ruml/core/runtime'
 require 'ruml/compiler/builder'
 
-module RUML
+module RUML::Boot
   UNLIMITED = 12345678901234567890
 
   module PrimitiveTypes
@@ -15,9 +15,8 @@ module RUML
     end
   end
 
-  module UML2
-
-    RUML::Compiler::Builder.new(target: self) do
+  module UML
+    RUML::Boot::Builder.new(target: self) do
       package :Core do
         package :PrimitiveTypes do
           class_ :Boolean do

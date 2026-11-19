@@ -21,46 +21,54 @@ module RUML
       opts ||= { } # EMPTY_HASH
       @opts = opts
       @created_modules = [ ]
-      @root_namespace = (opts[:root_namespace] || "").to_s
+      @root_namespace = opts[:root_namespace]
       @target = opts.fetch(:target)
       @target = RUML::Compiler::Target.const_get(@target) if ::Symbol === @target
       @target = @target.new unless RUML::Compiler::Target === @target
+      @target.frontend = self
       @current = nil
       @current_stack = [ ]
       @pass = 1
     end
 
     def run node
-      compile(node)
+      @target.emit_root(node) do
+        compile(node)
+      end
     end
 
     def eval_code()
-      ::Kernel.eval(@target.to_s)
+      code = @target.to_s
+      File.write("tmp/eval_code.rb", code)
+      load("tmp/eval_code.rb")
+      # ::Kernel.eval(code)
       self
     rescue
-      puts code; binding.pry
+      puts code # ; binding.pry
       raise
     end
 
     def compile node
       meta = node._.meta
-      sel = [ :"compile_#{meta}_#{pass}", :"compile_#{meta}" ].find do | sel |
-        respond_to?(sel)
+      sels = [ :"compile_#{meta}_#{pass}", :"compile_#{meta}" ]
+      # sels = [ :"compile_#{meta}_#{pass}" ]
+      sels.each do | sel |
+        if respond_to?(sel)
+          log { "#{sel.inspect} : #{node._}" }
+          return send(sel, node)
+        end
       end
-      if sel
-        log { "#{sel.inspect} : #{node._}" }
-        send(sel, node)
-      else
-        log { "no handler : #{node._}" }
-        # binding.pry
-        _compile_ownedElement(node)
-      end
+      log { "no handler : #{node._}" }
+      # binding.pry
+      _compile_ownedElement(node)
     end
 
     def compile_root_1 node
-      # binding.pry
+      @pass = 1
       node.ownedElement.each {|x| compile(x) }
       @pass = 2
+      node.ownedElement.each {|x| compile(x) }
+      @pass = 3
       node.ownedElement.each {|x| compile(x) }
     end
 
@@ -75,15 +83,12 @@ module RUML
 
     def compile_namespace_1 node
       path = node._.namespace_path
-      node_path_str = path.map(&:name).compact.join("::")
-      full_path_str = @root_namespace.to_s + "::" + node_path_str
+      path_str = path.map(&:name).compact.join("::")
       node._.to_h.update(
         path: path,
-        node_path_str: node_path_str,
-        full_path_str: full_path_str,
-        root_package: @root_namespace.to_s,
+        path_str: path_str,
       )
-      log { "#{full_path_str} { " }
+      log { "#{path_str} { " }
 
       @target.emit_namespace(node)
 
@@ -129,15 +134,31 @@ module RUML
     end
 
     def compile_association_3 node
-      binding.pry
+      # binding.pry
       args = node._.args
       owner = node.namespace
-      args[1] = owner._.lookup_node(args[1])._.full_path_str
-      args[5] = owner._.lookup_node(args[5])._.full_path_str
+      args[1] = owner._.lookup_node(args[1])._.path_str
+      args[5] = owner._.lookup_node(args[5])._.path_str
       @target.emit_association(:NOT_IMPLEMENTED, *args)
     end
 
     ######################################################
+
+    def walk node, &blk
+      t = RUML::Support::Traverser.new
+      t.traversing do
+        walk_node node, t, &blk
+      end
+    end
+
+    def walk_node node, t, &blk
+      t.traverse(node) do
+        yield node
+        node.ownedElement&.each do | e |
+          walk_node(e, t, &blk)
+        end
+      end
+    end
 
     def _compile_ownedElement node
       inside_namespace node do

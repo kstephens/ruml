@@ -32,4 +32,11 @@ describe RUML::XMI::Parser do
       expect(attributes.map { |attribute| attribute._.id }).to eq(%w[property other])
     end
   end
+  describe "compiled" do
+    let(:url) { "vendor/www.omg.org/spec/MOF/20131001/MOF.xmi" }
+    it "parses and compiles" do
+      root = subject.call(file.path)
+
+    end
+  end
 end

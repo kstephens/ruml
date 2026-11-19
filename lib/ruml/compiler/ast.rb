@@ -2,6 +2,7 @@
 
 require 'ruml/support/context'
 require 'ruml/support/basic_object'
+require 'ruml/core/navigation'
 
 module RUML
   module Compiler
@@ -10,10 +11,15 @@ module RUML
     class Node < Support::BasicObject::Base
       def _ ; @_ ||= Meta.new({node: self}) ; end
       Support.copy_method(self, :eql?, ::Object)
+      Support.copy_method(self, :is_a?, ::Object)
       def _desc_; "#{_._desc_} #{@_repr.keys}"; end
     end
 
     class Meta < Support::BasicObject::Base
+      include ::RUML::Core::Navigation
+      Support.copy_method(self, :eql?, ::Object)
+      Support.copy_method(self, :is_a?, ::Object)
+
       ATTRS = %i[meta name args].freeze
 
       def _desc_
@@ -29,26 +35,6 @@ module RUML
       def node_keys
         node._repr.keys
       end
-      def namespace_path
-        node, result = self.node, []
-        while node
-          result << node if node.name
-          node = node.namespace
-        end
-        result.reverse!
-      end
-
-      def namespace_str
-        namespace_path.map(&:name).compact.map!(&:to_s).join("::")
-      end
-
-      def root # -> Node
-        node = self.node
-        while node.namespace
-          node = node.namespace
-        end
-        node
-      end
 
       def args_named(args, *names)
         args.zip(names) do | (arg, name)|
@@ -63,57 +49,30 @@ module RUML
         end
       end
 
-      def find *args # -> Node
-        names = convert_to_path(args)
-        pp(args: args, name: names)
-        base = node
-        if names[0] == ""
-          base = root
-          names.shift
-        else
-          base = node
-        end
-        names.inject(base) do | node, name |
-          # pp(node: node, name: name)
-          found = node._.ownedElement_by_name(name)
-          return unless found
-          node = found
-        end
+      def namespace_path
+        super(self)
       end
 
-      def convert_to_path args
-        names = []
-        while arg = args.shift
-          case arg
-          when nil
-          when ::String, ::Symbol
-            names.concat(arg.to_s.split("::"))
-          when ::Array
-            args.unshift(arg)
-          when Node
-            names.concat(arg._.namespace_path.map(&:name))
-          else
-            __raise__ ::ArgumentError, "convert_to_path : unexpected #{arg.inspect}"
-          end
-        end
-        names
+      def namespace_str
+        super(self)
       end
 
-      def ownedElement_by_name name
-        name = name.to_s
-        node.ownedElement.find{|c| c.name == name}
+      def root_node # -> Node
+        super(self)
       end
 
-      def lookup_node ident
+      def find *names  # !!! FIX NAME
+        find_node(self, names)
+      end
+
+      def find_node(*names) # !!! FIX PROTOCOL
+        path = convert_to_name_path(names)
+        super(self, path)
+      end
+
+      def lookup_node ident # !!! FIX NAME
         return ident if AST::Node === ident
-        ident = ident.to_s
-        node = self.node
-        while node
-          if (found = node._.find(ident))
-            return found
-          end
-          node = node.namespace
-        end
+        find_node_scoped(self, ident)
       end
 
       def isStatic

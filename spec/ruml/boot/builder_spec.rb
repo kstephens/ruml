@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'ruml/compiler/builder'
+require 'ruml/boot/builder'
 
 module RUML::Spec::MM ; end
 
@@ -9,7 +9,7 @@ describe "Builder" do
 
   m = RUML::Spec::MM
 
-  b = RUML::Compiler::Builder.new(root_namespace: m) do
+  b = RUML::Boot::Builder.new(root_namespace: m) do
     package :P1 do
       package :P2 do
         class_ :C1 do

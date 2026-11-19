@@ -58,6 +58,7 @@ module RUML
 
         ::RUML::Support.copy_method(self, :hash, ::Object)
         ::RUML::Support.copy_method(self, :eql?, ::Object)
+        ::RUML::Support.copy_method(self, :is_a?, ::Object)
 
         def initialize h, &blk
           @_repr = h

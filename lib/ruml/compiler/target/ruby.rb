@@ -10,29 +10,42 @@ module RUML::Compiler
     UNLIMITED = 12345678901234567890
     STAR = UNLIMITED
 
+    def emit_root(_node)
+      ns = frontend.root_namespace
+      case ns
+      when ::Class
+        ns = "class #{ns}"
+      when ::Module
+        ns = "module #{ns}"
+      end
+      self << "#{ns}\n" if ns
+      yield
+      self << "end # #{ns}\n" if ns
+    end
+
     def emit_namespace(node)
-      path = node._.namespace_path
-      node_path_str = path.map(&:name).compact.join("::")
-      full_path_str = node._.root_package.to_s + "::" + node_path_str
+      path = navigator.namespace_path(node)
+      path_str = navigator.path_str(node)
       kind = META_TO_MODULE_CLASS.fetch(node._.meta)
-      declaration = "#{kind} #{full_path_str}"
+      declaration = "#{kind} #{path_str}"
 
       node._.to_h.update(
         path: path,
-        node_path_str: node_path_str,
-        full_path_str: full_path_str,
-        full_path_instance_behavior: "#{full_path_str}::RUML_InstanceBehavior",
-        full_path_module_behavior: "#{full_path_str}::RUML_ModuleBehavior",
+        path_str: path_str,
+        ruby_instance_behavior: "#{path_str}::RUML_InstanceBehavior",
+        ruby_module_behavior: "#{path_str}::RUML_ModuleBehavior",
         ruby_module_kind: kind,
         ruby_declaration: declaration,
-        ruby_declaration_full: "#{kind} #{full_path_str}",
+        ruby_declaration_full: "#{kind} #{path_str}",
       )
-      log { "#{full_path_str} { " }
+      log { "#{path_str} { " }
 
       if node._.meta == :class
-        supers = node.superClass.map{|super_| node.namespace._.lookup_node(super_)}
+        supers = node.superClass.map{|super_| navigator.find_node_scoped(node.namespace, super_)}
         if (super_ = supers.shift)
-          declaration << " < #{super_._.full_path_str}"
+          super_path_str = navigator.path_str(super_)
+          binding.pry if super_path_str.nil? || super_path_str.empty?
+          declaration << " < #{super_path_str}"
         end
         node._.superClass_remaining = supers
       end
@@ -61,10 +74,10 @@ module RUML::Compiler
 
     def emit_import node
       parent = node.namespace
-      dst = node._.full_path_str
+      dst = navigator.namespace_str(node)
       lines = []
       node.args.flatten.each do | name |
-        src = parent._.lookup_node(name)._.full_path_str
+        src = navigator.namespace_path(navigator.find_node_scoped(parent, name))
         lines << "#{src}.constants do | n |"
         lines << "  #{dst}.const_set(n, #{src}.const_get(n))"
         lines << "end"
@@ -73,10 +86,14 @@ module RUML::Compiler
     end
 
     def emit_generalization node
-      node_path = node._.full_path_str
+      node_path = navigator.path_str(node)
       parent = node.namespace
       generals = (node.generalization || []).map(&:general)
-      generals.map!{|g| parent._._find(g)._.full_path_str}
+      generals.map! do |g|
+        path = navigator.convert_to_name_path(g)
+        node = navigator.find_node(parent, path)
+        navigator.path_str(node)
+      end
 
       lines = []
       if node._.isAbstract
@@ -85,7 +102,7 @@ module RUML::Compiler
         lines << "#{node_path}.include(::RUML::Core::Runtime::Instantiable)"
       end
       node._.superClass_remaining.each do | super_ |
-        gen_path = parent._.find(super_)._.full_path_str
+        gen_path = navigator.path_str(navigator.find(parent, super_))
         lines << "#{node_path}.include(#{gen_path}::RUML_InstanceBehavior)"
       end
       generals.each do | gen_path |
@@ -102,7 +119,7 @@ module RUML::Compiler
       if ! body && node._.blk
         body = extract_method_body(node._.blk.source.to_s)
       end
-      self << "module " << full_path_module(node) << "\n"
+      self << "module " << path_module(node) << "\n"
       self << <<"RUBY"
 def #{name}
   #{body}
@@ -132,7 +149,7 @@ RUBY
     def emit_constant(node)
       name_upper = node.name.to_s.upper
       lines = []
-      lines << "module " << full_path_module(node)
+      lines << "module " << path_module(node)
       if method
           lines << <<"RUBY"
         def self.#{node.name} ; #{name_upper} ; end
@@ -149,13 +166,27 @@ RUBY
     def emit_property node
       # opts = node._.opts ||= {}
       name = node.name
-      type = node.type._.full_path_str
+      type = navigator.path_str(node.type)
       multiplicity = coerce_multiplicity(node.multiplicity)
+      opts = {primitive: hasStereotype?(node.type, :primitive)}
+      node._.resolved_type = type
+      node._.multiplicity = multiplicity
+      self << "module " << path_module(node) << "\n"
+      self << generate_property(name, type, multiplicity, opts)
+      self << "end\n"
+    end
 
-      if hasStereotype?(node.type, :primitive)
+    def generate_property node, opts
+      name, type, lower, upper, default =
+        node.name, node.type, node.lower, node.upper, node.default
+
+      desc = "Property : #{node.owner}.#{name} : #{type} #{lower}..#{upper < 0 ? "*" : upper}"
+      desc << " = #{default}" unless default.nil?
+
+      if opts[:primitive]
         coerce = lambda { | _msg |
           <<"RUBY"
-__val = __val.nil? ? __val : ::#{type}.coerce(__val)
+__val = #{type}.coerce(__val) unless __val.nil?
 RUBY
         }
         typecheck = LAMBDA_NIL
@@ -163,50 +194,57 @@ RUBY
         coerce = LAMBDA_NIL
         typecheck = lambda { | msg |
           <<"RUBY"
-raise ::ArgumentError, "#{msg}: expected #{type}" unless __val.nil? || ::#{type} === __val
+raise ::ArgumentError, "#{msg}: expected #{type}" unless __val.nil? || #{type} === __val
 RUBY
         }
       end
 
-      typecheck_min = if multiplicity.first == 1
+      typecheck_min = if lower == 1
         lambda { | msg |
           <<"RUBY"
-raise ::ArgumentError, "#{msg}: #{type} [#{multiplicity}]" if __val.nil?
+raise ::ArgumentError, #{desc.inspect} if __val.nil?
 RUBY
         }
       else
         LAMBDA_NIL
       end
 
-      multiplicity_min = if multiplicity.first > 0
+      multiplicity_min = if lower > 0
         lambda { | msg, size |
           <<"RUBY"
-raise ::ArgumentError, "#{msg}: #{type} [#{multiplicity}]" unless #{size} >= #{multiplicity.first}
+raise ::ArgumentError, "#{msg}: #{desc}" unless #{size} >= #{lower}
 RUBY
           }
       else
         LAMBDA_NIL
       end
 
-      multiplicity_max = if multiplicity.last != UNLIMITED
+      multiplicity_max = unless upper < 0 || upper == UNLIMITED
         lambda { | msg, size |
           <<"RUBY"
-raise ::ArgumentError, "#{msg}: #{type} [#{multiplicity}]" unless #{size} <= #{multiplicity.last}
+raise ::ArgumentError, "#{msg}: #{desc}" unless #{size} <= #{upper}
 RUBY
           }
       else
         LAMBDA_NIL
       end
 
-      code = "# Property #{name} : #{type} #{node.multiplicity}\n"
-      case multiplicity.last
+      typecheck = LAMBDA_NIL unless type
+
+      default = "||= #{default.inspect}" unless default.nil?
+
+      code = "  ##RUML #{desc}\n"
+      case upper
       when 1
         code << <<"RUBY"
   def #{name}
-    @#{name}
+    @#{name} #{default}
   end
-  def #{name}_count
-    @#{name}.nil? ? 0 : 1
+  def #{name}_multi!
+    @#{name}.nil? ? [ ] : [ @#{name} ]
+  end
+  def #{name}_count!
+    #{name}.nil? ? 0 : 1
   end
   def #{name}= __val
     # coerce
@@ -230,7 +268,7 @@ RUBY
     #{typecheck.call("#{name}_add!")}
     if @#{name} != __val
       # multiplicity_max
-      #{multiplicity_max.call("add_#{name}!", "count_#{name} + 1")}
+      #{multiplicity_max.call("#{name}_add!", "#{name}_count! + 1")}
       @#{name} = __val
     end
     self
@@ -243,7 +281,7 @@ RUBY
     #{typecheck.call("#{name}_remove!")}
     if @#{name} == __val
       # multiplicity_min
-      #{multiplicity_min.call("#{name}=", "#{name}_count - 1")}
+      #{multiplicity_min.call("#{name}=", "#{name}_count! - 1")}
       @#{name} = nil
     end
     self
@@ -254,7 +292,10 @@ RUBY
   def #{name}
     @#{name} ||= [ ]
   end
-  def #{name}_count
+  def #{name}_multi!
+    @#{name}
+  end
+  def #{name}_count!
     #{name}.size
   end
   def #{name}= __vals
@@ -293,22 +334,24 @@ RUBY
   end
 RUBY
       end
-      node._.resolved_type = type
-      node._.multiplicity = multiplicity
-      self << "module " << full_path_module(node) << "\n"
-      self << code
-      self << "end\n"
+      code
     end
 
 
-    def full_path_module(node)
+    def path_module(node)
+      result = _path_module(node)
+      binding.pry if result.nil? || result.empty?
+      result
+    end
+    def _path_module(node)
       parent = node.namespace
-      node._.isStatic ? parent._.full_path_module_behavior : parent._.full_path_instance_behavior
+      node._.isStatic ? parent._.ruby_module_behavior : parent._.ruby_instance_behavior
     end
 
-    def generate_association \
+    def emit_association(
       name1, type1, multiplicity1, opts1,
-      name2, type2, multiplicity2, opts2 = nil
+      name2, type2, multiplicity2, opts2
+    )
 =begin
       $stderr.puts \
 "  # association #{name1.inspect}, #{type1.inspect}, #{multiplicity1.inspect}, #{opts1.inspect},
@@ -347,84 +390,69 @@ RUBY
                  #{name2.inspect}, #{type2.inspect}, #{multiplicity2.inspect}, #{opts2.inspect}"
 =end
 
-      end1 = { :name => name1.to_sym, :type => type1, :multiplicity => multiplicity1 }.update(opts1)
-      end2 = { :name => name2.to_sym, :type => type2, :multiplicity => multiplicity2 }.update(opts2)
+      end1 = { :name => name1.to_sym, :type => type1, :lower => multiplicity1.first, :upper => multiplicity1.last }.update(opts1)
+      end2 = { :name => name2.to_sym, :type => type2, :lower => multiplicity2.first, :upper => multiplicity2.last }.update(opts2)
 
-      result = []
-
-      [ [ :end_1, end1, end2 ], [ :end_2, end2, end1 ] ].each do | (side, e, o) |
-        ename = e[:name]
-        etype = e[:type]
-
-        name = o[:name]
-        type = o[:type]
-        multiplicity = o[:multiplicity]
-
-        subsets = o[:subsets]
-        subsets = [ subsets ] unless Array === subsets
-        subsets = subsets.compact
-
-        case multiplicity.end
-        when 1
-          code = _generate_association_1(name, type, multiplicity, subsets, ename, etype)
-        else
-          code = _generate_association_N(name, type, multiplicity, subsets, ename, etype)
-        end
-
-        result[side] = {
-          meta: {
-            side: side,
-            code: code,
-          },
-          node: {
-            name: name,
-            type: type,
-            multiplicity: multiplicity,
-            subsets: subsets,
-          }
-        }
-      end
-
-      result
+      generate_association(end1, end2)
     end
 
-    def generate_association_1 name, type, multiplicity, subsets, ename, etype
+    def generate_association end1, end2
+      [ [ :end1, end1, end2 ], [ :end2, end2, end1 ] ].map do | (side, e, o) |
+        upper = o.upper
+        upper = :* if upper < 0
+        args = [o.name, o.type, o.lower, upper, o.subsets, e.name, e.type ]
+        desc = "Association : #{e.type}.#{o.name} : #{o.type} #{o.lower}..#{upper}"
+        code = "  ##RUML #{desc}\n"
+        if upper == 1
+          code << generate_association_1(*args)
+        else
+          code << generate_association_N(*args)
+        end
+        {
+          side: side,
+          code: code,
+          end1: end1,
+          end2: end2,
+        }
+      end
+    end
+
+    def generate_association_1 name, type, lower, upper, subsets, ename, etype
       code = <<"RUBY"
-  # AssociationEnd #{name} : #{type} #{multiplicity}
   def #{name}
     @#{name}
   end
-  def count_#{name}
-    @#{name} ? 1 : 0
+  def #{name}_count!
+    @#{name}.nil? ? 0 : 1
   end
-  def multi_#{name}
-    @#{name} ? [ @#{name} ] : [ ]
+  def #{name}_multi!
+    @#{name}.nil? ? [ ] : [ @#{name} ]
   end
   def #{name}= __val
     raise ArgumentError, "#{name}: expected #{type}" unless __val.nil? || #{type} === __val
-    clear_#{name}!
-    add_#{name}! __val
+    #{name}_clear!
+    #{name}_add!(__val)
   end
-  def clear_#{name}!
-    remove_#{name}! @#{name}
+  def #{name}_clear!
+    #{name}_remove!(@#{name})
   end
-  def add_#{name}! __val
+  def #{name}_add!(__val)
     return self if __val.nil?
     unless @#{name} == __val
-      raise ArgumentError, "add_#{name}!: already set" unless @#{name}.nil?
+      raise ArgumentError, "#{name}_add!: already set" unless @#{name}.nil?
       @#{name} = __val
-      #{subsets.map{|s| "add_#{s}!(__val)"} * '; '} # subsets #{subsets * ', '}
-      __val.add_#{ename}!(self)
+      #{generate_subsets(subsets, "_add!")}
+      __val.#{ename}_add!(self)
     end
     self
   end
-  def remove_#{name}! __val
+  def #{name}_remove!(__val)
     return self if __val.nil?
     if @#{name} == __val
-      raise ArgumentError, "remove_#{name}!: expected #{type}" unless #{type} === __val
+      raise ArgumentError, "#{name}_remove!: expected #{type}" unless #{type} === __val
       @#{name} = nil
-      #{subsets.map{|s| "remove_#{s}!(__val)"} * '; '} # subsets #{subsets * ', '}
-      __val.remove_#{ename}!(self)
+      #{generate_subsets(subsets, "_remove!")}
+      __val.#{ename}_remove!(self)
     end
     self
   end
@@ -432,49 +460,54 @@ RUBY
       code
     end
 
-    def generate_association_N name, type, multiplicity, subsets, ename, etype
+    def generate_association_N name, type, lower, upper, subsets, ename, etype
       code = <<"RUBY"
-  # AssociationEnd #{name} : #{type} #{multiplicity}
   def #{name}
     @#{name} ||= [ ]
   end
-  def count_#{name}
+  def #{name}_count!
     #{name}.size
   end
-  alias :multi_#{name} :#{name}
-  def #{name}= __vals
-    clear_#{name}!
-    __vals.each { | __val | add_#{name}! __val }
+  alias :#{name}_multi! :#{name}
+  def #{name}=(__vals)
+    #{name}_clear!
+    __vals.each { | __val | #{name}_add!(__val) }
     self
   end
-  def clear_#{name}!
-    #{name}.dup.each { | __val | remove_#{name}! __val }
+  def #{name}_clear!
+    #{name}.dup.each { | __val | #{name}_remove!(__val) }
     self
   end
-  def add_#{name}! __val
+  def #{name}_add! __val
     return self if __val.nil?
-    raise ArgumentError, "add_#{name}!: expected #{type}" unless #{type} === __val
+    raise ArgumentError, "#{name}_add!: expected #{type}" unless #{type} === __val
     __cur = #{name}
     unless __cur.include?(__val)
       __cur.push(__val)
-      #{subsets.map{|s| "add_#{s}!(__val)"} * '; '} # subsets #{subsets * ', '}
-      __val.add_#{ename}!(self)
+      #{generate_subsets(subsets, "_add!")}
+      __val.#{ename}_add!(self)
     end
     self
   end
-  def remove_#{name}! __val
+  def #{name}_remove! __val
     return self if __val.nil?
-    raise ArgumentError, "remove_#{name}!: expected #{type}" unless #{type} === __val
+    raise ArgumentError, "#{name}_remove!: expected #{type}" unless #{type} === __val
     __cur = #{name}
     if __cur.include?(__val)
       __cur.delete(__val)
-      #{subsets.map{|s| "remove_#{s}!(__val)"} * '; '} # subsets #{subsets * ', '}
-      __val.remove_#{ename}(self)
+      #{generate_subsets(subsets, "_remove!")}
+      __val.#{ename}_remove!(self)
     end
     self
   end
 RUBY
       code
+    end
+
+    def generate_subsets subsets, suffix
+      subsets.map do |subset|
+        "#{subset}#{suffix}(__val) ##RUML subsets #{subset}"
+      end * "\n      "
     end
 
     def coerce_multiplicity_value x

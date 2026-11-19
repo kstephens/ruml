@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'rmof'
+require 'ruml'
 require 'ruml/xmi'
 require 'ruml/xmi/factory'
 require 'ruml/xmi/factory2'
@@ -16,6 +16,7 @@ module RUML
       include RUML::Support::Logging::Basic
       attr_accessor :parsers
       attr_reader :factory
+      attr_reader :stats
       attr_accessor :error, :error_elems
 
       class ParserError < ::StandardError ; end
@@ -32,6 +33,11 @@ module RUML
           # "https://www.omg.org/spec/UML/20161101/PrimitiveTypes.xmi",
         }
         @factory = factory ||= Factory2.new
+        @stats = Hash.new do | h, n |
+          h[n] = Hash.new do | h, k |
+            h[k] = 0
+          end
+        end
       end
 
       def call(url)
@@ -153,6 +159,19 @@ module RUML
       end
 
       def _parse(elem)
+        xmi_type, xmi_id, xmi_idref, href = parse_xmi_attrs(elem)
+        top_level.stats[:xmi_type][xmi_type] += 1
+        top_level.stats[:nil_xmi_type][elem.name] += 1 unless xmi_type
+        # pp(xmi_idref: xmi_idref, name: elem.name) unless xmi_type
+        top_level.stats[:href][href] += 1
+        top_level.stats[:name][elem.name] += 1
+        get_attr(elem, nil, nil) do | attr |
+          top_level.stats[:properties][attr.name] += 1
+        end
+        elem.children.each{|e| parse(e) }
+      end
+
+      def x_parse(elem)
         logger.debug { "### ######################################################" }
         logger.debug { "ELEM  : #{elem.name} @#{elem.object_id}" }
         logger.debug { "ATTRS : #{convert_attrs(elem).inspect}" }
@@ -160,10 +179,7 @@ module RUML
         parent = @target_stack.last
         @elem_stack.push(elem)
         begin
-          xmi_type = get_attr(elem, 'xmi', 'type')&.value
-          xmi_id = get_attr(elem, 'xmi', 'id')&.value
-          xmi_idref = get_attr(elem, 'xmi', 'idref')&.value
-          href = get_attr(elem, nil, 'href')&.value
+          xmi_type, xmi_id, xmi_idref, href = parse_xmi_attrs(elem)
           unique_id = xmi_id || xmi_idref
           unique_id &&= "#{@xmi_url}\##{unique_id}"
           case
@@ -193,7 +209,7 @@ module RUML
             obj._.node_parent = parent
             parent._.node_children << obj if parent
             factory.associate(parent, :ownedElement, obj) if parent
-            obj.namespace = parent
+            obj.owner = parent
             factory.set_source_location(obj, @xmi_url, elem.line)
             @xmi_id_to_object[xmi_id] = obj if xmi_id
             logger.debug { "PROPERTIES : #{properties.inspect}" }
@@ -232,6 +248,14 @@ module RUML
         ensure
           @elem_stack.pop
         end
+      end
+
+      def parse_xmi_attrs(elem)
+        xmi_type = get_attr(elem, 'xmi', 'type')&.value
+        xmi_id = get_attr(elem, 'xmi', 'id')&.value
+        xmi_idref = get_attr(elem, 'xmi', 'idref')&.value
+        href = get_attr(elem, nil, 'href')&.value
+        [xmi_type, xmi_id, xmi_idref, href]
       end
 
       def convert_attrs(elem)

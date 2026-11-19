@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'rmof'
+require 'ruml'
 
 module RUML
   module XMI

@@ -16,7 +16,7 @@ module RUML
         @traverse_ident = ident if ident
         initialize_traverse
         traverse_log ": ..."
-        yield
+        yield self
       rescue
         initialize_traverse
         traverse_log ": DONE"

@@ -46,6 +46,19 @@ module RUML::Boot
     end
   end
 
+  class Factory
+    def initialize root_module
+      @root_module = root_module
+    end
+
+    def new cls, properties, &blk
+    end
+
+    def resolve_name to, from = nil
+    end
+  end
+
+
   module MOF
     module Reflection
       class Object < Base

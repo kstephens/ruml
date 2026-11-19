@@ -15,6 +15,8 @@ def parse_xmi input_file
   parser = RUML::XMI::Parser.new
   factory = parser.factory
   root = parser.call(input_file)
+  pp(parser.stats)
+  binding.pry
   resolver = RUML::XMI::Resolver.new
   # binding.pry
   root = resolver.call(root)

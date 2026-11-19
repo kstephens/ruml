@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'rmof'
+require 'ruml'
 require 'logger'
 require 'ruml/support/logging'
 
@@ -17,7 +17,7 @@ module RUML
 
       attr_reader :root, :classes, :objects
 
-      def initialize
+      def initialize &blk
         @namespaces = {}
         @object_id = 0
         @id_to_object = {}
@@ -28,6 +28,7 @@ module RUML
         @get_class = {}
         @root = Module.new
         logger.level = Logger::WARN
+        instance_eval(&blk) if blk
       end
 
       def make_instance(xmlns, name, properties=nil, id=nil)
@@ -50,7 +51,7 @@ module RUML
 
       def get_class(xmlns, name, properties=nil, id=nil)
         key = [xmlns, name]
-        if cls = @get_class[key]
+        if (cls = @get_class[key])
           return cls
         end
         xmlns = xmlns.to_sym
