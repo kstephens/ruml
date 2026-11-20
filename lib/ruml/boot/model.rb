@@ -9,7 +9,8 @@ module RUML::Boot::Model
   PrimitiveTypes = RUML::Core::PrimitiveTypes
 
   module UML
-    ruml.import RUML::Core::PrimitiveTypes
+    ruml.import "PrimitiveTypes"
+
     class Element
       ruml.association \
         "+owner : Element 0..1 {readOnly, union}", \
@@ -213,6 +214,9 @@ ownedMember}"
     end
   end
   module MOF
+    ruml.import "PrimitiveTypes"
+    ruml.import "UML"
+
     # Class = UML::Class
     # Boolean = UML::Boolean
 
@@ -230,14 +234,12 @@ ownedMember}"
         ruml.property "+ value : String"
         ruml.association \
           "+tag : Tag",
-          "+element : MOF::Reflection::Element 0..*"
+          "+element : Reflection::Element 0..*"
       end
     end
   end
   module MOFEXT
-    class Tag
-    end
+    Tag = MOF::Extension::Tag
   end
   MODEL = ruml.end!
 end
-

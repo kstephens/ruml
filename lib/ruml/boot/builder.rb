@@ -2,9 +2,10 @@
 
 require 'ruml/boot'
 require 'ruml/core/runtime'
-require 'ruml/support/basic_object'
-require 'ruml/compiler/target/ruby'
 require 'ruml/core/notation'
+require 'ruml/compiler/target/ruby'
+require 'ruml/support/basic_object'
+require 'ruml/support/context'
 require 'binding_of_caller'
 
 module RUML::Boot
@@ -15,9 +16,7 @@ module RUML::Boot
     Error = ::RUML::Error
 
     class Node < BasicObject::Base
-      def _desc_
-        @_repr.inspect
-      end
+      def _desc_ ; @_repr.inspect ; end
       def _ ; @_ ||= BasicObject::Base.new ; end
     end
     Notation = RUML::Core::Notation
@@ -30,6 +29,7 @@ module RUML::Boot
       @target = RUML::Compiler::Target::Ruby.new
       @info = Hash.new {|h, k| h[k] = BasicObject::Base.new({})}
       @notation = Notation.new(self)
+      @trace = false
     end
 
     def info obj
@@ -45,10 +45,13 @@ module RUML::Boot
     def end!
       @state = :end
       ::Module.undef_method(:ruml)
-      [1, 2].each do | pass|
+      [0, 1, 2].each do | pass|
         @items.each do | item |
-          # $stderr.puts "#{self.class} : pass #{pass} #{item.inspect}"
-          send(:"_#{item.name}_#{pass}", item)
+          sel = :"_#{item.name}_#{pass}"
+          if respond_to?(sel)
+            $stderr.puts "#{self.class} : pass #{pass} #{item.inspect}" if @trace
+            send(sel, item)
+          end
         end
       end
       File.write("tmp/builder.rb", @target.to_s)
@@ -57,10 +60,28 @@ module RUML::Boot
       self
     end
 
+    ##########################################
+
+    def _import_0 item
+      item.args.each do | ns |
+        src = _resolve_value(ns, item.target)
+        dst = item.target
+        $stderr.puts("### import #{ns} -> #{src.inspect}") if @trace
+        raise "import : cannot find #{ns.inspect} in #{dst.inspect}" unless ns
+        src.constants.each do | c |
+          $stderr.puts("### import #{dst}::#{c} = #{src}::#{c}") if @trace
+          dst.send(:remove_const, c) rescue nil
+          dst.const_set(c, src.const_get(c))
+        end
+      end
+    end
+
     def _property_1 item
-      raise NotationError, "Property : expected 1 args" if items.args.size != 1
+      raise NotationError, "Property : expected 1 args" if item.args.size != 1
       notation = item.args[0]
-      item.node = prop = @notation.property(notation) or raise NotationError, "Property : #{notation.inspect}"
+      prop = @notation.property(notation)
+      raise NotationError, "Property : #{notation.inspect}" unless prop
+      item.node = prop
       prop.owner = item.target
       prop.name = _fix_name(prop.name)
       gen = RUML::Compiler::Target::Ruby.new
@@ -73,46 +94,44 @@ module RUML::Boot
       # _eval_code(code)
       # binding.pry
     end
-    def _property_2 item
-    end
 
     def _association_1 item
-      raise NotationError, "Association : expected 2 args" if items.args.size != 2
+      raise NotationError, "Association : expected 2 args" if item.args.size != 2
       props = item.args.map do | notation |
-        prop = @notation.property(notation) or
-          raise NotationError, "Association : #{notation.inspect}"
+        prop = @notation.property(notation)
+        raise NotationError, "Association : #{notation.inspect}" unless prop
         prop.name = _fix_name(prop.name)
-        prop.type = _resolve_type(prop.type, item.target)
+        type = _resolve_type(prop.type, item.target)
+        raise NotationError, "Association : #{notation.inspect} : cannot resolve type #{prop.type.inspect}" unless type
         prop.owner = _resolve_type(item.target, item.target)
-        info(prop).ruby_module = _resolve_type(prop.type, item.target)
+        prop.type = type
+        prop._.ruby_module = prop.type
         prop
       end
       p1, p2 = props
-      # binding.pry
       gen = RUML::Compiler::Target::Ruby.new
       result = gen.generate_association(p1, p2)
       result.each do | assoc |
         prop = assoc[:end1]
-        code = _wrap_code(info(prop).ruby_module, assoc[:code])
+        code = _wrap_code(prop._.ruby_module, assoc[:code])
         @target << code
       end
     end
-    def _association_2 item
-    end
 
     def _operation_1 item
-      raise NotationError, "Operation : expected 1 args" if items.args.size != 1
-      op = @notation.operation(item.args[0]) or
-        raise NotationError, "invalid Operation : #{notation.inspect}"
+      raise NotationError, "Operation : expected 1 args" if item.args.size != 1
+      notation = item.args[0]
+      item.node = op = @notation.operation(notation)
+      raise NotationError, "Operation : #{notation.inspect}" unless op
       op.name = _fix_name(op.name)
-      op.type = _resolve_type(op.type, item.target)
-      info(op).ruby_module = _resolve_type(op.type, item.target)
-      op.parameters.map! do | param |
-        param
+      op._.ruby_module = item.target
+      op.parameters.each do | param |
+        param.name = _fix_name(param.name)
+        pp(param.to_h) if @trace
+        type = _resolve_type(param.type, item.target)
+        raise NotationError, "Parameter : #{param.name.inspect} : cannot resolve type #{param.type.inspect}" unless type
+        param.type = type
       end
-    end
-
-    def _operation_2 item
     end
 
     def _enum_1 item
@@ -122,11 +141,6 @@ module RUML::Boot
       end
       (info(item.target).enumerations ||= []) << item
     end
-    def _enum_2 item
-    end
-
-    def _enumeration_1 item
-    end
 
     def _enumeration_2 item
       enumerations = info(item.target).enumerations
@@ -134,51 +148,45 @@ module RUML::Boot
       code = <<"RUBY"
   include(::#{Enumeration})
   def self.names
-    @names ||= #{names.inspect}.freeze
+    @names ||= #{names.inspect}.map!(&:freeze).freeze
   end
 RUBY
       @target << _wrap_code(item.target, code)
     end
 
-    def _import_1 item
-      item.args.each do | ns |
-        ns.constants do | c |
-          item.target.const_set(ns.const_get(c))
-        end
-      end
-    end
-    def _import_2 item
+    ##########################################
+
+    def _resolve_type type, base
+      _resolve_value(type, base)
     end
 
-    def _resolve_type type, target
-      return nil if type.nil?
-      return type if ::Module === type
-      path = _split_path(type)
-      binding.pry if path.empty?
-      target_path = _split_path(target)
-      target = _lookup_path(target_path[0..-2], ::Kernel)
-      target = ::Kernel if path[0] == ""
-      _lookup_path(path, target)
+    def _resolve_value name, base
+      return name if name.nil? || ::Module === name
+      type_path = _split_path(name)
+      base_path = _split_path(base)[0..-2]
+      _lookup_in_scope(type_path, base_path, ::Object)
     end
 
     def _split_path path
-      path.to_s.split("::")
+      return path if ::Array === path
+      path.to_s.strip.split("::", -1).map!(&:strip).map!(&:freeze).reject(&:empty?)
     end
 
-    def _lookup path, base
-      path = _split_path(path, base)
-      binding.pry if path.empty?
-      base = [ @root ] if path[0] == ""
-      while base
-        if (ns = _lookup_path(path, base))
+    def _lookup_in_scope path, base_path, root=nil
+      base_path = base_path.dup
+      base_path = [ root || @root ] if base_path.empty? || base_path[0] == ""
+      # pp(_lookup_in_scope: [path, base_path]) if @trace
+      until base_path.empty?
+        base_obj = _lookup_value(base_path, ::Object)
+        if (ns = _lookup_value(path, base_obj))
           return ns
         end
-        base = base.pop
+        base_path.pop
       end
     end
 
-    def _lookup_path path, base
-      path.inject(base) do | mod, name |
+    def _lookup_value path, base_module
+      path.inject(base_module) do | mod, name |
         if name && name != ""
           name = name.to_sym
           begin
@@ -224,7 +232,7 @@ RUBY
       target.include(Element)
       # binding.pry if blk
       @items << Item.new(target, name, args, blk)
-      # $stderr.puts(@items[-1].inspect)
+      # $stderr.puts(@items[-1].inspect) if @trace
       self
     end
 
@@ -242,7 +250,6 @@ RUBY
     module Element
       def initialize properties=nil
         properties&.each do | k, v |
-          # binding.pry unless respond_to?(:"#{k}=")
           instance_variable_set(:"@#{k}", v)
           # send(:"#{k}=", v)
         end

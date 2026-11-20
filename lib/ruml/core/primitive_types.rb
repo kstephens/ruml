@@ -20,7 +20,7 @@ module RUML
         @_repr_ = repr
       end
       def self.to_native type, value
-        type._coerce_to_native(value)
+        type.__ruml_coerce__(value)
       rescue
         raise CoercionError, "cannot coerce #{value.inspect} to #{type.inspect}"
       end
@@ -47,7 +47,7 @@ module RUML
           ""      => false,
         }.freeze
 
-        def self._coerce_to_native x
+        def self.__ruml_coerce__ x
           case x
           when ::Integer, ::Float, ::Rational, ::Complex then ! x.zero?
           else
@@ -62,7 +62,7 @@ module RUML
         include PrimitiveType
         ruml :stereotype, :primitive
 
-        def self._coerce_to_native x
+        def self.__ruml_coerce__ x
           Integer(x)
         end
       end
@@ -71,7 +71,7 @@ module RUML
         include PrimitiveType
         ruml :stereotype, :primitive
 
-        def self._coerce_to_native x
+        def self.__ruml_coerce__ x
           Float(x)
         end
       end
@@ -80,7 +80,7 @@ module RUML
         include PrimitiveType
         ruml :stereotype, :primitive
 
-        def self._coerce_to_native x
+        def self.__ruml_coerce__ x
           x.to_s
         end
       end
@@ -89,7 +89,7 @@ module RUML
         include PrimitiveType
         ruml :stereotype, :primitive
 
-        def self._coerce_to_native x
+        def self.__ruml_coerce__ x
           case x
           when :*, '*'
             UNLIMITED
