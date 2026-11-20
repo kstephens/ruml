@@ -12,7 +12,7 @@ module RUML
     class Target
       include Support::Initialize, Support::Logging::Basic
 
-      attr_accessor :frontend
+      attr_accessor :frontend, :trace
 
       def context
         @context ||= ::RUML::Support.Contexts.new
@@ -30,7 +30,7 @@ module RUML
         if ::Array === x
           x.each{|x| self << x.to_s << "\n"}
         else
-          $stderr << x.to_s
+          $stderr << x.to_s if @trace
           out << x.to_s
         end
         self

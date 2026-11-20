@@ -29,8 +29,8 @@ module RUML::Core
           isReadOnly: pms.include?("readOnly"),
           isDerivedUnion: !! pms.include?("union"),
           isID: pms.include?("id"),
-          subsets: modifier_values(pms, 'subsets'),
-          redefines: modifier_values(pms, 'redefines'),
+          subsets: modifier_values(pms, 'subsets'), # !!! use actual models
+          redefines: modifier_values(pms, 'redefines'), # !!! use actual models
         }
         if pms.include?("seq") || pms.include?("sequence")
           prop.update(
@@ -38,19 +38,17 @@ module RUML::Core
             isOrdered: true,
           )
         end
-        # h[:subsets] = h[:subsets] # !!! use actual models
-        # h[:redefines] = h[:redefines]  # !!! use actual models
         prop
       end
     end
 
     def operation x
       _parse(OPERATION, x, :UML, :Operation) do | h |
-        prefix = _match(OPERATION_PREFIX, x)
-        suffix = _match(OPERATION_SUFFIX, x)
+        prefix = _match(OPERATION_PREFIX, h[:operation_prefix])
+        suffix = _match(OPERATION_SUFFIX, h[:operation_suffix])
         mods = modifiers(suffix[:modifiers])
         range = multiplicity(suffix[:multiplicity])
-        params = h[:parameters].split(/\s*,\s*/).map do | param |
+        params = h[:parameters].split(/\s*,\s*/).map!(&:strip).map do | param |
           parameter(param)
         end
         op = {
@@ -59,6 +57,7 @@ module RUML::Core
           name: prefix[:name],
           parameters: params,
         }
+        # binding.pry if $stop_here
         if suffix[:type]
           op[:parameters] << _new(
             :UML, :Parameter,
@@ -188,7 +187,7 @@ module RUML::Core
       \s*
       )
     }x
-    PARAMETERS = %r{\((?<parameters>#{PARAMETER}(?:,#{PARAMETER})*)\)}
+    PARAMETERS = %r{\((?<parameters>(?:#{PARAMETER}(?:,#{PARAMETER})*)?)\)}
     OPERATION_PREFIX = %r{\A
       \s*#{VISIBILITY}?
       \s*#{IS_DERIVED}?
@@ -199,12 +198,12 @@ module RUML::Core
       \s*#{MULTIPLICITY}?
       \s*#{DEFAULT}?
       \s*#{MODIFIERS}?
-    }x
-    OPERATION = %r{\A
-      #{OPERATION_PREFIX}
-      #{PARAMETERS}
-      #{OPERATION_SUFFIX}
       \s*
+    \Z}x
+    OPERATION = %r{
+      (?<operation_prefix>#{OPERATION_PREFIX})
+      #{PARAMETERS}
+      (?<operation_suffix>#{OPERATION_SUFFIX})
     \Z}x
   end
 end

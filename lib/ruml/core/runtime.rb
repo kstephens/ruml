@@ -85,14 +85,14 @@ module Runtime
       end
 
       module ClassMethods
-        def __coerce__ x
+        def __ruml_coerce__ x
           case x
           when self               then x
           when ::Symbol, ::String then by_name(x)
           else raise ::ArgumentError, "#{self} : invalid value #{x.inspect}"
           end
         end
-        alias_method :[], :__coerce__
+        alias_method :[], :__ruml_coerce__
         def by_name x
           (@by_name ||=
             (

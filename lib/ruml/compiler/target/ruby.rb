@@ -10,6 +10,9 @@ module RUML::Compiler
     UNLIMITED = 12345678901234567890
     STAR = UNLIMITED
 
+    Instantiable = ::RUML::Core::Runtime::Instantiable
+    Uninstantiatable = ::RUML::Core::Runtime::Uninstantiatable
+
     def emit_root(_node)
       ns = frontend.root_namespace
       case ns
@@ -97,9 +100,9 @@ module RUML::Compiler
 
       lines = []
       if node._.isAbstract
-        lines << "#{node_path}.include(::RUML::Core::Runtime::Uninstantiatable)"
+        lines << "#{node_path}.include(#{Uninstantiable})"
       else
-        lines << "#{node_path}.include(::RUML::Core::Runtime::Instantiable)"
+        lines << "#{node_path}.include(#{Instantiable})"
       end
       node._.superClass_remaining.each do | super_ |
         gen_path = navigator.path_str(navigator.find(parent, super_))

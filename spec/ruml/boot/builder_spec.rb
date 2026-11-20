@@ -9,7 +9,7 @@ describe "Builder" do
 
   m = RUML::Spec::MM
 
-  b = RUML::Boot::Builder.new(root_namespace: m) do
+  b = RUML::Boot::Builder.new(root: m) do
     package :P1 do
       package :P2 do
         class_ :C1 do
