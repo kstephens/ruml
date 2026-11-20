@@ -24,7 +24,8 @@ describe RUML::XMI::Parser do
       file.write(xml)
       file.flush
 
-      root = subject.call(file.path)
+      root = subject.call(file.to_path)
+      # binding.pry
       model = root.model.first
       klass = model.ownedMember.first
       attributes = klass.ownedAttribute
@@ -32,11 +33,11 @@ describe RUML::XMI::Parser do
       expect(attributes.map { |attribute| attribute._.id }).to eq(%w[property other])
     end
   end
+
   describe "compiled" do
     let(:url) { "vendor/www.omg.org/spec/MOF/20131001/MOF.xmi" }
     it "parses and compiles" do
-      root = subject.call(file.path)
-
+      root = subject.call(url)
     end
   end
 end

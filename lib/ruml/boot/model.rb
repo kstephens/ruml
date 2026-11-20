@@ -1,249 +1,243 @@
 # frozen_string_literal: true
 
-# Loosely follows subset of MOF/2.5.1.
-module RUML::Boot
+require 'ruml/core/runtime'
+require 'ruml/core/primitive_types'
+require 'ruml/boot/builder'
 
-  class Error < StandardError
-    class NotImplementedError < self; end
-  end
+module RUML::Boot::Model
+  RUML::Boot::Builder.new(self).begin!
+  PrimitiveTypes = RUML::Core::PrimitiveTypes
 
-  # Similar to UML::Property
-  class Property
-    attr_accessor :name, :value, :elements, :owner
-    def initialize(name:, owner:)
-      @name = name
-      @value = value
-      @elements = []
-      @owner = owner
+  module UML
+    ruml.import RUML::Core::PrimitiveTypes
+    class Element
+      ruml.association \
+        "+owner : Element 0..1 {readOnly, union}", \
+        "+/ownedElement : Element * {readOnly, union}"
     end
-  end
-
-  class Base
-    @@id_next = 0
-
-    def initialize(**properties)
-      @_properties = {}
-      @_operations = {}
-      properties.each do | k, v |
-        @_properties[k] = v
+    class NamedElement < Element
+      ruml.property "+ name : String [0..1]"
+      ruml.property "+ visibility : VisibilityKind [0..1]"
+      ruml.property "+ /qualifiedName : String [0..1] {readOnly}" do
+        node, path = self, nil
+        while node
+          (path ||= []) << node.name if node && node != ""
+          node = node.owner
+        end
+        path.reverse!.join("::") if path
       end
     end
-
-    def id
-      @id ||= (@@id_next += 1)
+    class Comment < Element
+      ruml.property "+ body : String [0..1]"
+      ruml.association \
+        "+ ownedComment : Comment * {subsets ownedElement}",
+        "+ owningElement : Element 0..1 {subsets owner}"
+      ruml.association \
+        "+ ownedComment : Comment * {subsets ownedElement}" ,
+        "+ annotatedElement : Element *"
     end
 
-    def method_missing sel, *args
-      raise Error, "#{sel} : cannot take block" if block_given?
-      case
-      when args.empty?
-        @_properties[sel]
-      when sel.to_s[-1] == "="
-        @_properties[sel] = args[0]
-      else
-        @_operations[sel].call(*args)
-      end
+    class Namespace < NamedElement
+      ruml.association \
+        "+ /namespace : Namespace 0..1 {readOnly, union, subsets memberNamespace, subsets owner}",
+        "+ /ownedMember : NamedElement * {readOnly, union, subsets member, subsets ownedElement}"
+      ruml.association \
+        "+ /memberNamespace : Namespace * {readOnly, union, subsets memberNamespace, subsets owner}",
+        "+ /member : NamedElement {readOnly, union}"
+    end
+
+    class StringExpression
+    end
+    #### PER XMI
+    class Package < Namespace
+      ruml.property "+ URI : String [0..1]"
+    end
+    class PackageImport
+    end
+    class Type
+    end
+    class Classifier < Namespace
+      ruml.property "+isAbstract : Boolean = false"
+      ruml.property "+ isFinalSpecialization : Boolean" # ???
+      ruml.association \
+        "+ classifier : Classifier *", \
+        "+ /general : Classifier *"
+      ruml.association \
+        "+ classifier : Classifier 0..1 {readOnly, union, subsets featuringClassifier,
+subsets redefinitionContext}", \
+        "+ /attribute : Property * {ordered, readOnly, union, subsets
+feature, subsets redefinableElement}"
+    end
+    class Class < Classifier
+    end
+    class Constraint
+    end
+    class OpaqueExpression
+      ruml.property "+ body : String [*] {ordered, nonunique}"
+      ruml.property "+ language : String [*] {ordered}"
+    end
+    class Generalization
+      ruml.property "+ isSubstitutable : Boolean [0..1] = true"
+      ruml.association \
+        "+specific : Classifier 1 {subsets source,
+subsets owner}", \
+        "+generalization : Generalization {subsets ownedElement, subsets directedRelationship}"
+      ruml.association \
+        "+general : Classifier 1 {subsets target}", \
+        "+ generalization : Generalization* {subsets
+directedRelationship}"
+    end
+    class MultiplicityElement
+      ruml.property "+isOrdered : Boolean = false"
+      ruml.property "+isUnique : Boolean = true"
+      ruml.property "+/lower : Integer [0..1] = 1"
+      ruml.property "+/upper : UnlimitedNatural [0..1] = 1"
+    end
+    class StructuralFeature < MultiplicityElement
+      ruml.property "isReadOnly : Boolean [1..1] = false"
+    end
+    class Property < StructuralFeature
+      ruml.property "+aggregation : AggregationKind = none"
+      ruml.property "+/default : String [0..1]"
+      ruml.property "+/isComposite : Boolean"
+      ruml.property "+isDerived : Boolean = false"
+      ruml.property "+isDerivedUnion : Boolean = false"
+      ruml.property "+isID : Boolean = false"
+      ruml.association \
+        "+ ownedAttribute : Property * {ordered, subsets attribute, subsets ownedMember, redefines ownedAttribute}",
+        "+ class : Class 0..1 {subsets namespace, subsets
+structuredClassifier, subsets classifier}"
+      ruml.association \
+        "+ qualifier : Property * {ordered, subsets ownedElement}",
+        "+ associationEnd : Property 0..1 {subsets owner}"
+      ruml.association \
+        "+ /opposite : Property 0..1",
+        "+ property : Property 0..1"
+      ruml.association \
+        "+ subsettedProperty : Property * {subsets redefinedElement}",
+        "+ property : Property *"
+      ruml.association \
+        "+ property : Property * {subsets
+redefinableElement}",
+        "+ redefinedProperty : Property * {subsets redefinedElement}"
+    end
+
+    class Association
+      ruml.superClass :Relationship, :Classifier
+      ruml.property "+ isDerived : Boolean = false"
+      ruml.association \
+        "+owningAssociator : Association 0..1 {composite, subsets featuringClassifier,
+subsets namespace, subsets
+association, subsets
+redefinitionContext}",
+        "+ownedEnd : Property * {ordered, subsets feature, subsets
+redefinableElement, subsets
+memberEnd, subsets
+ownedMember}"
+      ruml.association \
+        "+ association : Association 0..1 {subsets owningAssociation}",
+        "+ navigableOwnedEnd : Property * {subsets ownedEnd}"
+      ruml.association \
+        "+ association : Association 0..1 {subsets memberNamespace}",
+        "+ memberEnd : Property 2..* {ordered, subsets member}"
+      ruml.association \
+        "+ association : Association 0..1 {subsets relationship}",
+        "+ memberEnd : Type 1..* {readOnly, subsets relatedElement}"
+    end
+    class AssociationClass < Association
+      ruml.superClass :Class
+    end
+
+    # class LiteralInteger
+    # end
+    # class LiteralUnlimitedNatural
+    # end
+    # class LiteralBoolean
+    # end
+    class Parameter < MultiplicityElement
+      ruml.property "+direction : ParameterDirectionKind = in"
+    end
+    class Operation < NamedElement
+      ruml.property "+/isOrdered : Boolean = false{readOnly}"
+      ruml.property "+isQuery : Boolean = false"
+      ruml.property "+/isUnique : Boolean = true{readOnly}"
+      ruml.property "+/lower : Integer [0..1] = 1{readOnly}"
+      ruml.property "+/upper : UnlimitedNatural [0..1] = 1{readOnly}"
+      ruml.association \
+        "+ operation : Operation 0..1 {subsets ownerFormalParam}", \
+        "+ ownedParameter : Parameter * {ordered, redefines ownedParameter}"
+    end
+    class ParameterDirectionKind # < ruml.enumeration
+      ruml.enum :in
+      ruml.enum :inout
+      ruml.enum :out
+      ruml.enum :return
+    end
+    class Association
+      ruml.property "+isDerived : Boolean = false"
+      ruml.association \
+        "+ ownedEnd : Property * {ordered, subsets feature, subsets redefinableElement, subsets memberEnd, subsets ownedMember}", \
+        "+ owningAssociation : Association 0..1 {subsets featuringClassifier, subsets namespace, subsets association, subsets redefinitionContext}"
+      ruml.association \
+        "+ navigableOwnedEnd : Property * {subsets ownedEnd}", \
+        "+ association : Association 0..1 {subsets owningAssociation}"
+      ruml.association \
+        "+ memberEnd : Property 2..* {ordered, subsets member}", \
+        "+ association : Association 0..1 {subsets memberNamespace}"
+    end
+    class InstanceValue
+    end
+    class Enumeration < Class
+      ruml.association \
+        "+enumeration : Enumeration [1..1] {subsets namespace}", \
+        "+ownedLiteral : EnumerationLiteral [0..*] {ordered, subsets ownedMember}"
+    end
+    class EnumerationLiteral
+      ruml.property "+ name: String"
+    end
+    class VisibilityKind # < ruml.enumeration
+      ruml.enum :public    # "+"
+      ruml.enum :private   # "-"
+      ruml.enum :protected # "#"
+      ruml.enum :package   # "~"
+    end
+    class AggregationKind # < ruml.enumeration
+      ruml.enum :none
+      ruml.enum :shared       # open diamond
+      ruml.enum :composite    # filled diamond
+    end
+    class AggregationKind # < ruml.enumeration
+      ruml.enum :none
+      ruml.enum :shared       # open diamond
+      ruml.enum :composite    # filled diamond
     end
   end
-
-  class Factory
-    def initialize root_module
-      @root_module = root_module
-    end
-
-    def new cls, properties, &blk
-    end
-
-    def resolve_name to, from = nil
-    end
-  end
-
-
   module MOF
+    # Class = UML::Class
+    # Boolean = UML::Boolean
+
     module Reflection
-      class Object < Base
-        def get(property:)
-          @properties[property]
-        end
-        def equals(element:) # : Boolean{query}
-          element.equals?(self)
-        end
-        def set(property:, value:) # : Object{query}
-          @properties[property] = value
-          self
-        end
-        def isSet(property:) # : Boolean{query}
-          @properties.key?(property)
-        end
-        def unset(property:) #
-          @properties.delete(property)
-        end
-        def invoke(op:, arguments:) # : Object [0..1]
-          @operations[op]._invoke(op, arguments)
-        end
-      end
-
-      class Element < Object
-        def initialize(metaclass:)
-          @_metaclass = metaclass
-        end
-
-        # /metaclass: Class
-        def metaclass ; getMetaClass() ; end
-        # getMetaClass() : Class
-        def getMetaClass()
-          @_metaclass
-          # raise Unimplemented("getMetaClass")
-        end
-        # container(): Element
-        def container()
-          raise NotImplementedError, "container"
-        end
-      end
-
-      class Factory < Element
-        # createFromString(dataType: DataType, string: String): Object
-        def createFromString(dataType:, string:)
-          raise NotImplementedError("createFromString")
-        end
-        # convertToString(datatype: DataType, object: Object): String
-        def convertToString(datatype:, object:) # : String
-          raise NotImplementedError("convertToString")
-        end
-      end
-
-      class Type
-        # isInstance(object: Object) : Boolean{query}
-        def isInstance(object:) # : Boolean{query}
-          raise NotImplementedError("isInstance")
-        end
-      end
-    end
-
-    module Identifiers
-      class Extent < Reflection::Object
-
-      end
-      class URLExtent < Extent
-
-      end
-    end
-    module Common
-      class ReflectiveCollection < Reflection::Object
-        # !RUBY
-        include ::Enumerable
-
-        def initialize
-          super()
-          @_objects = []
-        end
-        # add(object: Object): Boolean
-        def add(object:) # : Boolean
-          @_objects.push(object)
-          true # !!!
-        end
-        # addAll(elements: ReflectiveSequence): Boolean
-        def addAll(elements:)
-          result = false
-          elements.each do | x |
-            # !!! check if object already exists?
-            @_objects.push(x)
-            result = true # !!!
-          end
-          result
-        end
-        # clear()
-        def clear()
-          @_objects.empty
-          nil
-        end
-        # remove(object: Object): Boolean
-        def remove(object:)
-          result = @_objects.include?(object)
-          @_objects.delete(object)
-          result
-        end
-        # size(): Integer
-        def size()
-          @_objects.size
-        end
-
-        # !RUBY
-        def each &blk
-          @_objects.each(&blk)
-        end
-      end
-
-      class ReflectiveSequence < ReflectiveCollection
-        # add(index: Integer, object: Object)
-        # add(object: Object)
-        def add(index:, object:)
-          current = @_objects[index]
-          @_objects.insert(index, object)
-          current
-        end
-        # get(index: Integer): Object
-        def get(index:)
-          @_objects[index]
-        end
-        # remove(index: Integer): Object
-        def remove(index:)
-          current = _objects[index]
-          @_objects.delete_at(index)
-          current
-        end
-        # set(index: Integer, object: Object): Object
-        def set(index:, object:)
-          current = @_objects[index]
-          @_objects[index] = object
-          current
-        end
+      class Element
+        ruml.operation "+getMetaClass() : Class {query}"
+        ruml.operation "+container() : Element {query}"
+        ruml.operation "+isInstanceOfType(type : Class, includesSubtypes: Boolean) : Boolean {query}"
       end
     end
 
     module Extension
       class Tag < Reflection::Element
-        attr_accessor :name, :value, :element
-        def initialize(name:, value:)
-          super()
-          @name = name
-          @value = value
-          @element = []
-        end
-        def getMetaClass # : Class {query}
-        end
-        def container() # : Element {query}
-        end
-        def isInstanceOfType(type:, includesSubtypes:) # : Boolean{query}
-          raise NotImplementedError("isInstanceOfType")
-        end
+        ruml.property "+ name : String"
+        ruml.property "+ value : String"
+        ruml.association \
+          "+tag : Tag",
+          "+element : MOF::Reflection::Element 0..*"
       end
     end
   end
-
-  module UML
-    class Element < Base
-    end
-    class NamedElement < Element
-    end
-    class PackageableElement < Element
-    end
-    class Namespace < NamedElement
-    end
-    class Package < Namespace
-    end
-    class Type < PackageableElement
-      # conformsTo(other:) # : Boolean{query}
-      def conformsTo(other:)
-        raise NotImplementedError, "conformsTo(other:)"
-      end
-    end
-    class Classifier < Type
-    end
-    class Class < Classifer
-    end
-    class Property < Base
-      attr_accessor :isID # : Boolean = false
+  module MOFEXT
+    class Tag
     end
   end
+  MODEL = ruml.end!
 end
+

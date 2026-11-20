@@ -2,31 +2,38 @@
 
 require 'ruml/boot'
 require 'ruml/core/runtime'
-require 'ruml/compiler'
-require 'ruml/support/navigable'
 require 'ruml/support/basic_object'
-require 'ruml/compiler/ast'
 require 'ruml/compiler/target/ruby'
-require 'ruml/support/logging'
-require 'ruml/support/context'
 require 'ruml/core/notation'
-require 'ruml/compiler/frontend'
 require 'binding_of_caller'
 
 module RUML::Boot
   class Builder
-    class Node < RUML::Support::BasicObject::Base
+    BasicObject = ::RUML::Support::BasicObject
+    Enumeration = ::RUML::Core::Runtime::Enumeration
+    NotationError = ::RUML::Core::NotationError
+    Error = ::RUML::Error
+
+    class Node < BasicObject::Base
       def _desc_
         @_repr.inspect
       end
+      def _ ; @_ ||= BasicObject::Base.new ; end
     end
     Notation = RUML::Core::Notation
 
-    def initialize target
-      @target = target
+    def initialize root
+      @root = root
       @state = :active
       @items = []
       @pass = 0
+      @target = RUML::Compiler::Target::Ruby.new
+      @info = Hash.new {|h, k| h[k] = BasicObject::Base.new({})}
+      @notation = Notation.new(self)
+    end
+
+    def info obj
+      @info[obj]
     end
 
     def begin!
@@ -44,39 +51,40 @@ module RUML::Boot
           send(:"_#{item.name}_#{pass}", item)
         end
       end
+      File.write("tmp/builder.rb", @target.to_s)
+      load("tmp/builder.rb")
+      # ::Kernel.eval(@target.to_s)
       self
     end
 
-    # def new name, props
-    #   if @pass == 0
-    #     Node.new(props)
-    #   else
-    #     @target.const_get(:UML).const_get(name).new(props)
-    #   end
-    # end
-
     def _property_1 item
-      item.node = prop = Node.new({type: :Property})
+      raise NotationError, "Property : expected 1 args" if items.args.size != 1
       notation = item.args[0]
+      item.node = prop = @notation.property(notation) or raise NotationError, "Property : #{notation.inspect}"
       prop.owner = item.target
-      Notation.new.property(notation, prop) or raise
+      prop.name = _fix_name(prop.name)
       gen = RUML::Compiler::Target::Ruby.new
       if item.blk
         item.target.define_method(prop.name, &item.blk)
         return
       end
       code = _wrap_code(item.target, gen.generate_property(prop, {}))
-      _eval_code(code)
+      @target << code
+      # _eval_code(code)
       # binding.pry
+    end
+    def _property_2 item
     end
 
     def _association_1 item
-      props = item.args.map do | arg |
-        prop = Node.new({type: :Property})
-        Notation.new.property(arg, prop) or raise
+      raise NotationError, "Association : expected 2 args" if items.args.size != 2
+      props = item.args.map do | notation |
+        prop = @notation.property(notation) or
+          raise NotationError, "Association : #{notation.inspect}"
+        prop.name = _fix_name(prop.name)
         prop.type = _resolve_type(prop.type, item.target)
         prop.owner = _resolve_type(item.target, item.target)
-        prop.ruby_module = _resolve_type(prop.type, item.target)
+        info(prop).ruby_module = _resolve_type(prop.type, item.target)
         prop
       end
       p1, p2 = props
@@ -84,73 +92,130 @@ module RUML::Boot
       gen = RUML::Compiler::Target::Ruby.new
       result = gen.generate_association(p1, p2)
       result.each do | assoc |
-        code = _wrap_code(assoc[:end1].ruby_module, assoc[:code])
-        _eval_code(code)
+        prop = assoc[:end1]
+        code = _wrap_code(info(prop).ruby_module, assoc[:code])
+        @target << code
       end
     end
-
-    def _enum_1 item
-      name = item.args[0].to_sym
-      name_upper = name.to_s.upcase.to_sym
-      item.target.singleton_class.include(Enumeration)
-      item.target.define_singleton_method(name) { name }
-      item.target.const_set(name_upper, name)
-      self
-    end
-
-    def _property_2 item
-    end
-
     def _association_2 item
     end
 
-    def _enum_2 item
-    end
-
-    def _import item
-      item.args.each do | ns |
-        ns.constants do | c |
-          target.const_set(ns.const_get(c))
-        end
+    def _operation_1 item
+      raise NotationError, "Operation : expected 1 args" if items.args.size != 1
+      op = @notation.operation(item.args[0]) or
+        raise NotationError, "invalid Operation : #{notation.inspect}"
+      op.name = _fix_name(op.name)
+      op.type = _resolve_type(op.type, item.target)
+      info(op).ruby_module = _resolve_type(op.type, item.target)
+      op.parameters.map! do | param |
+        param
       end
     end
 
+    def _operation_2 item
+    end
+
+    def _enum_1 item
+      unless info(item.target).isEnumeration
+        info(item.target).isEnumeration = true
+        @items << Item.new(item.target, :enumeration, item.target.to_s)
+      end
+      (info(item.target).enumerations ||= []) << item
+    end
+    def _enum_2 item
+    end
+
+    def _enumeration_1 item
+    end
+
+    def _enumeration_2 item
+      enumerations = info(item.target).enumerations
+      names = enumerations.map{|enum| enum.args[0].to_s}
+      code = <<"RUBY"
+  include(::#{Enumeration})
+  def self.names
+    @names ||= #{names.inspect}.freeze
+  end
+RUBY
+      @target << _wrap_code(item.target, code)
+    end
+
+    def _import_1 item
+      item.args.each do | ns |
+        ns.constants do | c |
+          item.target.const_set(ns.const_get(c))
+        end
+      end
+    end
+    def _import_2 item
+    end
+
     def _resolve_type type, target
+      return nil if type.nil?
       return type if ::Module === type
       path = _split_path(type)
+      binding.pry if path.empty?
       target_path = _split_path(target)
       target = _lookup_path(target_path[0..-2], ::Kernel)
       target = ::Kernel if path[0] == ""
       _lookup_path(path, target)
     end
+
     def _split_path path
-      path.to_s.split("::").reject(&:empty?)
+      path.to_s.split("::")
     end
-    def _lookup_path path, base
-      path.inject(base) do | mod, name |
-        mod.const_get(name) if name && name != ""
+
+    def _lookup path, base
+      path = _split_path(path, base)
+      binding.pry if path.empty?
+      base = [ @root ] if path[0] == ""
+      while base
+        if (ns = _lookup_path(path, base))
+          return ns
+        end
+        base = base.pop
       end
     end
+
+    def _lookup_path path, base
+      path.inject(base) do | mod, name |
+        if name && name != ""
+          name = name.to_sym
+          begin
+            mod.const_get(name, false)
+          rescue ::NameError
+            return nil
+          end
+        end
+      end
+    end
+
+    def _fix_name name
+      RUBY_KEYWORDS.include?(name) ? "#{name}_" : name
+    end
+
+    def new ns, name, props, id = nil
+      obj = Node.new(props)
+      obj._.metatype = name.to_sym
+      obj
+    end
+
+    RUBY_KEYWORDS = %w[
+      class module
+      begin end
+      if else elsif
+      case then else
+      raise rescue ensure
+      catch throw
+    ]
 
     def _wrap_code target, code
       prefix = case target
       when ::Class then "class"
-      else "module"
+      when ::Module then "module"
+      else raise Error, "invalid target : #{target.inspect}"
       end
-      "#{prefix} ::#{target} \n#{code} \nend # #{prefix} ::#{target} \n"
-    end
-
-    def _eval_code code, kind=""
-      if @verbose
-        lines = code.split("\n").select{|l| l =~ /^\s*(##RUML |module\s|class\s|def\s|alias\s)/}
-        lines.unshift("# #{kind.to_s}")
-        $stderr.puts(lines * "\n")
-      end
-      # if code =~ /\bnamespace=/
-      #   puts(code)
-      #   binding.pry
-      # end
-      ::Kernel.eval(code)
+      "\n#{prefix} ::#{target} \n#{code} \nend # #{prefix} ::#{target} \n\n"
     end
 
     def method_missing name, *args, &blk
@@ -164,21 +229,6 @@ module RUML::Boot
     end
 
     class Item < Struct.new(:target, :name, :args, :blk, :node)
-    end
-
-    module Enumeration
-      def _coerce_to_native(x)
-        send(:"#{x.to_sym}")
-      end
-    end
-
-    class EnumerationLiteral < Struct.new(:name)
-      def to_s ; name.to_s ; end
-      def to_sym ; name ; end
-      def == other
-        self == other || name == other.to_sym
-      end
-      alias_method :===, :==
     end
 
     module ModuleMethods
@@ -200,4 +250,3 @@ module RUML::Boot
     end
   end
 end
-

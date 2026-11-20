@@ -1,12 +1,13 @@
 # frozen_string_literal: true
 
 require 'ruml/core/primitive_types'
+require 'ruml/boot/model'
 
-describe RUML::Boot::UML::Core::PrimitiveTypes do
+describe RUML::Boot::Model::PrimitiveTypes do
   describe "to_native" do
     it "coerces data" do
-      pt = RUML::Boot::PrimitiveType
-      m = RUML::Boot::UML::Core::PrimitiveTypes
+      pt = RUML::Core::PrimitiveType
+      m = RUML::Boot::Model::PrimitiveTypes
 
       values = [nil, true, false, 0, 1, -1, 2.3, "string", "", :symbol, :*, "*"]
       types = [m::Boolean, m::Integer, m::Real, m::String, m::UnlimitedNatural]

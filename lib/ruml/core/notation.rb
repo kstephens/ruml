@@ -6,47 +6,98 @@ module RUML::Core
   class NotationError < RUML::Error; end
 
   class Notation
+    def initialize(factory)
+      @factory = factory
+    end
+
     # Parses a UML property string, e.g. "+ /name : String [0..1] = x {readOnly}",
     # assigns its attributes to obj and returns the captured parts as a Hash.
-    def property x, obj
-      return unless (h = parse_end(x))
-      apply_end h, obj
-      h
-    end
-
-    def apply_end h, obj
-      obj.visibility = VISIBILITY.fetch(h[:visibility] || '+')
-      obj.isDerived = !!h[:derived]
-      obj.name = h[:name]&.to_sym
-      obj.type = h[:prop_type]&.to_sym
-      obj.default = h[:default]
-      pms = h[:prop_modifiers]
-      obj.isOrdered = pms.include?("ordered") && !pms.include?("unordered")
-      obj.isUnique = !pms.include?("nonunique")
-      if pms.include?("seq") || pms.include?("sequence")
-        obj.isUnique = false
-        obj.isOrdered = true
+    def property x
+      _parse(PROPERTY, x, :UML, :Property) do | h |
+        pms = modifiers(h[:modifiers])
+        range = multiplicity(h[:multiplicity])
+        prop = {
+          visibility: visibility(h[:visibility]),
+          isDerived: !!h[:isDerived],
+          name: h[:name],
+          type: h[:type]&.to_s,
+          lower: range.begin,
+          upper: range.end,
+          default: h[:default],
+          isOrdered: pms.include?("ordered") && !pms.include?("unordered"),
+          isUnique: !pms.include?("nonunique"),
+          isReadOnly: pms.include?("readOnly"),
+          isDerivedUnion: !! pms.include?("union"),
+          isID: pms.include?("id"),
+          subsets: modifier_values(pms, 'subsets'),
+          redefines: modifier_values(pms, 'redefines'),
+        }
+        if pms.include?("seq") || pms.include?("sequence")
+          prop.update(
+            isUnique: false,
+            isOrdered: true,
+          )
+        end
+        # h[:subsets] = h[:subsets] # !!! use actual models
+        # h[:redefines] = h[:redefines]  # !!! use actual models
+        prop
       end
-      obj.isReadOnly = pms.include?("readOnly")
-      obj.isDerivedUnion = !! pms.include?("union")
-      obj.isID = pms.include?("id")
-      range = multiplicity(h[:multiplicity_range])
-      obj.lower = range.begin
-      obj.upper = range.end # -1 is unbounded.
-      obj.subsets = h[:subsets] # !!! use actual models
-      obj.redefines = h[:redefines]  # !!! use actual models
-      obj
     end
 
-    def parse_end x
-      return unless (m = PROPERTY.match(x))
-      h = m.named_captures.transform_keys(&:to_sym)
-      h[:prop_modifiers] = (h[:prop_modifier] || '').strip.split(/\s*,\s*/).map! do |pm|
+    def operation x
+      _parse(OPERATION, x, :UML, :Operation) do | h |
+        prefix = _match(OPERATION_PREFIX, x)
+        suffix = _match(OPERATION_SUFFIX, x)
+        mods = modifiers(suffix[:modifiers])
+        range = multiplicity(suffix[:multiplicity])
+        params = h[:parameters].split(/\s*,\s*/).map do | param |
+          parameter(param)
+        end
+        op = {
+          visibility: visibility(prefix[:visibility]),
+          isDerived: !!prefix[:isDerived],
+          name: prefix[:name],
+          parameters: params,
+        }
+        if suffix[:type]
+          op[:parameters] << _new(
+            :UML, :Parameter,
+            type: suffix[:type],
+            name: "return",
+            direction: :return,
+            lower: range.begin,
+            upper: range.end,
+            default: nil,
+          )
+        end
+        op
+      end
+    end
+
+    def parameter x
+      _parse(PARAMETER, x, :UML, :Parameter) do | h |
+        mods = modifiers(h[:modifiers])
+        range = multiplicity(h[:multiplicity])
+        direction = [:in, :out, :inout, :return].find{|dir| mods.include?(dir.to_s)} || :in
+        {
+          name: h[:name],
+          type: h[:type]&.to_s,
+          direction: direction,
+          lower: range.begin,
+          upper: range.end,
+          default: h[:default],
+        }
+      end
+    end
+
+    def visibility s
+      VISIBILITY_NAME.fetch(s || '+')
+    end
+
+    def modifiers s
+      (s || '').strip.split(/\s*,\s*/).map! do |pm|
         pm.split(/\s+/).join(' ')
       end
-      h[:subsets] = modifier_values(h[:prop_modifiers], 'subsets')
-      h[:redefines] = modifier_values(h[:prop_modifiers], 'redefines')
-      h
     end
 
     def modifier_values pms, key
@@ -74,29 +125,87 @@ module RUML::Core
       end
     end
 
-    VISIBILITY = {
+    def _parse rx, str, ns, name
+      str = str.strip
+      return unless (match = _match(rx, str))
+      properties = (yield match) || match
+      obj = _new(ns, name, properties)
+      obj._.metatype = name.to_sym
+      obj._.properties = properties
+      obj._.match = match
+      obj._.notation = str
+      obj
+    end
+
+    def _new ns, name, properties
+      @factory.new(ns, name, properties)
+    end
+
+    def _match rx, s
+      if s && (m = rx.match(s))
+        m.named_captures.transform_keys(&:to_sym)
+      end
+    end
+
+    VISIBILITY_NAME = {
       '+' => :public,
       '-' => :private,
       '#' => :protected,
       '~' => :package,
     }
+    INTEGER = %r{(?<integer>[-+]?\d+)}
+    FLOAT = %r{(?<float>[-+]?(?:\d+\.\d*|\.\d+)(?:[eE][-+]?\d+)?)}
+    STRING = %r{(?<string>"(?:\\.|[^"])*")}
+    BOOLEAN = %r{(?<boolean>true|false)}
+    KEYWORD = %r{(?<keyword>[_a-zA-Z][_a-zA-Z0-9]*)}
+    CONSTANT = %r{(?:#{STRING}|#{FLOAT}|#{INTEGER}|#{BOOLEAN}|#{KEYWORD})}
+
+    VISIBILITY = %r{(?<visibility>[-+\#~])}
+    IS_DERIVED = %r{(?<isDerived>/)}
+    NAME = %r{(?<name>[_a-zA-Z][_a-zA-Z0-9]*)}
+    TYPE = %r{(?::\s*(?<type>(?:[A-Z][_a-zA-Z0-9]*(?:::[A-Z][_a-zA-Z0-9]*)*)))\s*}
+    MULTIPLICITY = %r{(?:\[?(?<multiplicity>\d+(?:\.\.(?:\d+|\*))?|\*)\]?)}
+    DEFAULT = %r{(?:=\s*(?<default>#{CONSTANT}))}
+    MODIFIERS = %r{(?:\{(?<modifiers>[^\}]*)\})}
+
     PROPERTY = %r{\A
+      \s*#{VISIBILITY}?
+      \s*#{IS_DERIVED}?\
+      \s*#{NAME}
+      \s*#{TYPE}?
+      \s*#{MULTIPLICITY}?
+      \s*#{DEFAULT}?
+      \s*#{MODIFIERS}?
       \s*
-      (?<visibility>[-+\#~])?
+    \Z}x
+    PARAMETER = %r{
+      (?:
+      \s*#{NAME}
+      \s*#{TYPE}
+      \s*#{MULTIPLICITY}?
+      \s*#{DEFAULT}?
+      \s*#{MODIFIERS}?
       \s*
-      (?<derived>/)?
+      )
+    }x
+    PARAMETERS = %r{\((?<parameters>#{PARAMETER}(?:,#{PARAMETER})*)\)}
+    OPERATION_PREFIX = %r{\A
+      \s*#{VISIBILITY}?
+      \s*#{IS_DERIVED}?
+      \s*#{NAME}
+    }x
+    OPERATION_SUFFIX = %r{
+      \s*#{TYPE}?
+      \s*#{MULTIPLICITY}?
+      \s*#{DEFAULT}?
+      \s*#{MODIFIERS}?
+    }x
+    OPERATION = %r{\A
+      #{OPERATION_PREFIX}
+      #{PARAMETERS}
+      #{OPERATION_SUFFIX}
       \s*
-      (?<name>[_a-zA-Z]\w*)?
-      \s*
-      (?::\s*(?<prop_type>\w+))?
-      \s*
-      (?:\[?(?<multiplicity_range>\d+(?:\.\.(?:\d+|\*))?|\*)\]?)?
-      \s*
-      (?:=\s*(?<default>[^\s{]+))?
-      \s*
-      (?:\{(?<prop_modifier>[^}]+)\})?
-      \s*
-      \z}x
+    \Z}x
   end
 end
 

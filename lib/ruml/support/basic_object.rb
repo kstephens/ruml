@@ -10,6 +10,7 @@ module RUML
         ::RUML::Support.copy_method(self, :__class__, ::Kernel, :class)
         ::RUML::Support.copy_method(self, :__caller_locations__, ::Kernel, :caller_locations)
         ::RUML::Support.copy_method(self, :__raise__, ::Kernel, :raise)
+        ::RUML::Support.copy_method(self, :__respond_to?, ::Object, :respond_to?)
 
         def [] n
           __raise__ "#{n}" unless ::Symbol === n
@@ -20,6 +21,19 @@ module RUML
           _repr[n] = v
         end
 
+        def respond_to? name
+          case name.to_s
+          when /\?\Z/
+            false
+          when /\A(.+)=\Z/
+            true
+          when /\A[_a-z][_a-zA-Z0-9]*\Z/
+            _repr.key?(name)
+          else
+            __respond_to?(name)
+          end
+        end
+
         def method_missing name, *args, &blk
           name = name.to_sym
           line = __caller_locations__[0]
@@ -27,8 +41,8 @@ module RUML
           # raise "SDKJFSKDJF" if _repr.key?("Cls2")
           case name.to_s
           when /\?\Z/
-            $stderr.puts("method_missing #{name.inspect} #{args.inspect}")
-            super
+            # $stderr.puts("method_missing #{name.inspect} #{args.inspect}")
+            super(name, *args, &blk)
           when /\A(.+)=\Z/
             __raise__ "not enough args" if args.empty?
             key = $1.to_sym
@@ -60,8 +74,8 @@ module RUML
         ::RUML::Support.copy_method(self, :eql?, ::Object)
         ::RUML::Support.copy_method(self, :is_a?, ::Object)
 
-        def initialize h, &blk
-          @_repr = h
+        def initialize h=nil, &blk
+          @_repr = h || {}
           @_blk = blk
           @_line_ = (blk&.source_location || "?:?").to_s
         end

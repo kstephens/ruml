@@ -110,6 +110,7 @@ GEM
     parser (3.3.13.0)
       ast (~> 2.4.1)
       racc
+    parslet (2.0.0)
     pp (0.6.4)
       prettyprint
     prettyprint (0.2.1)
@@ -230,6 +231,7 @@ DEPENDENCIES
   method_source (~> 1.1)
   multi_json (~> 1.21)
   nokogiri (~> 1.19)
+  parslet (~> 2.0)
   pry (~> 0.16.0)
   pry-byebug (~> 3.12)
   pry-stack_explorer (~> 0.6.3)

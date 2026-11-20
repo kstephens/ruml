@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
-module RUML
-module Core
+module RUML::Core
 module Runtime
   N = 1000000000000000 unless defined? N
   STAR = (0 .. N) unless defined? STAR
@@ -59,6 +58,53 @@ module Runtime
       alias :initialize :_initialize
     end
   end
+    module Enumeration
+      def self.included(target)
+        super(target)
+        target.extend(ClassMethods)
+      end
+      attr_reader :name
+
+      alias_method :to_s, :name
+      def to_sym ; @to_sym ||= name.to_sym ; end
+      def inspect
+        @inspect ||= "#{self.class}[#{to_sym.inspect}]".freeze
+      end
+
+      def == other
+        case other
+        when self.class
+          equal?(other)
+        when ::Symbol
+          to_sym == other
+        when ::String
+          to_s == other
+        else
+          false
+        end
+      end
+
+      module ClassMethods
+        def __coerce__ x
+          case x
+          when self               then x
+          when ::Symbol, ::String then by_name(x)
+          else raise ::ArgumentError, "#{self} : invalid value #{x.inspect}"
+          end
+        end
+        alias_method :[], :__coerce__
+        def by_name x
+          (@by_name ||=
+            (
+              enums.map{|e| [e.name.to_s.freeze, e]} +
+              enums.map{|e| [e.name.to_sym, e]}
+            ).to_h.freeze
+          ).fetch(x)
+        end
+        def enums
+          @enums ||= names.map{|name| new(name: name.to_s.freeze)}.freeze
+        end
+      end
+    end
 end
-  end
 end

@@ -8,6 +8,7 @@ gem "mail", "~> 2.9"
 gem "method_source", "~> 1.1"
 gem "multi_json", "~> 1.21"
 gem "nokogiri", "~> 1.19"
+gem "parslet", "~> 2.0"
 gem "sourcify", "~> 0.5.0"
 gem "typhoeus", "~> 1.6"
 

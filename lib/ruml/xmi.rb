@@ -2,7 +2,5 @@
 
 require 'ruml'
 
-module RUML
-  module XMI
-  end
+module RUML::XMI
 end
