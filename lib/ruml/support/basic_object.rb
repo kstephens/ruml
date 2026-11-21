@@ -11,6 +11,8 @@ module RUML
         ::RUML::Support.copy_method(self, :__caller_locations__, ::Kernel, :caller_locations)
         ::RUML::Support.copy_method(self, :__raise__, ::Kernel, :raise)
         ::RUML::Support.copy_method(self, :__respond_to?, ::Object, :respond_to?)
+        # ::RUML::Support.copy_method(self, :__eq__, ::Object, :==)
+        ::RUML::Support.copy_method(self, :__hash_, ::Object, :hash)
 
         def [] n
           __raise__ "#{n}" unless ::Symbol === n
@@ -48,13 +50,9 @@ module RUML
             key = $1.to_sym
             body = ::Kernel.lambda {|val| _repr[key] = val }
           else
-            __raise__ "too many args" if args.size > 1
-            body = ::Kernel.lambda do | *args |
-              if args.size == 1
-                _repr[name] = args.first
-              else
-                _repr[name]
-              end
+            __raise__ "too many args" if args.size > 0
+            body = ::Kernel.lambda do | *_args |
+              _repr[name]
             end
           end
           self.__class__.define_method(name, &body)
@@ -73,6 +71,7 @@ module RUML
         ::RUML::Support.copy_method(self, :hash, ::Object)
         ::RUML::Support.copy_method(self, :eql?, ::Object)
         ::RUML::Support.copy_method(self, :is_a?, ::Object)
+        ::RUML::Support.copy_method(self, :==, ::Object)
 
         def initialize h=nil, &blk
           @_repr = h || {}

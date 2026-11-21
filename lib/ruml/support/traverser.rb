@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'ruml/xmi'
-require 'ruml/xmi/introspection'
 
 module RUML
   module Support

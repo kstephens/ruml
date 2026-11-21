@@ -2,10 +2,11 @@
 
 require 'ruml/boot/model'
 require 'ruml/boot/factory'
+require 'ruml/core/factory'
 
 describe RUML::Boot::Model do
   let(:model) { RUML::Boot::Model }
-  let(:factory) { RUML::Boot::Factory.new(model)}
+  let(:factory) { RUML::Core::Factory.new(model)}
   it "builds and compiles to Ruby" do
     ns = factory.new(:UML, :Namespace, name: "ns")
     c1 = factory.new(:UML, :Class, name: "C1")

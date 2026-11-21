@@ -2,6 +2,7 @@
 
 require 'ruml/compiler/target'
 require 'ruml/support/initialize'
+require 'ruml/support/misc'
 require 'method_source'
 require 'ripper'
 
@@ -10,8 +11,19 @@ module RUML::Compiler
     UNLIMITED = 12345678901234567890
     STAR = UNLIMITED
 
+    include RUML::Support::Misc
+
     Instantiable = ::RUML::Core::Runtime::Instantiable
     Uninstantiatable = ::RUML::Core::Runtime::Uninstantiatable
+    Import = RUML::Core::Runtime::Import
+    Enumeration = RUML::Core::Runtime::Enumeration
+
+    def emit_preamble(node)
+      self << "require 'ruml/core/runtime'\n"
+    end
+
+    def emit_postamble(node)
+    end
 
     def emit_root(_node)
       ns = frontend.root_namespace
@@ -43,49 +55,66 @@ module RUML::Compiler
       )
       log { "#{path_str} { " }
 
-      if node._.meta == :class
-        supers = node.superClass.map{|super_| navigator.find_node_scoped(node.namespace, super_)}
+      if node._.meta == :Class
+        supers = node.superClass.map do |name|
+          or_die(find_node_scoped(node.namespace, name)) do
+            "class #{node.name} : cannot find superclass #{name.inspect}"
+          end
+        end
+        # supers = node.superClass.dup
         if (super_ = supers.shift)
           super_path_str = navigator.path_str(super_)
-          binding.pry if super_path_str.nil? || super_path_str.empty?
           declaration << " < #{super_path_str}"
         end
         node._.superClass_remaining = supers
       end
 
-      lines = []
-      lines << declaration
-      lines << "  module RUML_InstanceBehavior"
-      lines << "  end"
-      lines << "  module RUML_ModuleBehavior"
-      lines << "  end"
-      lines << "  def self.included(target)"
-      lines << "    target.include(RUML_InstanceBehavior)"
-      lines << "    target.extend(RUML_ModuleBehavior)"
-      lines << "  end"
+      line! "##RUML #{node._.meta} #{node.name}"
+      node.stereotype&.each do | st |
+        line! "##RUML stereotype <<#{st.name}>>"
+      end
+      line! declaration
+      line! "  module RUML_InstanceBehavior"
+      line! "  end"
+      line! "  module RUML_ModuleBehavior"
+      emit_enumeration(node)
+      node.ownedAttribute&.each do | prop |
+        line! generate_property(prop)
+      end
+      line! "  end"
+      line! "  def self.included(target)"
+      line! "    target.include(RUML_InstanceBehavior)"
+      line! "    target.extend(RUML_ModuleBehavior)"
+      line! "  end"
       node._.ruby_include&.each do | m |
-        lines << "  include #{m}"
+        line! "  include #{m}"
       end
       node._.ruby_extend&.each do | m |
-        lines << "  extend #{m}"
+        line! "  extend #{m}"
       end
-      lines << "  self"
-      lines << "end"
-      lines << ""
-      self << lines
+      line! "  self"
+      line! "end"
+      line! ""
     end
 
     def emit_import node
-      parent = node.namespace
-      dst = navigator.namespace_str(node)
-      lines = []
-      node.args.flatten.each do | name |
-        src = navigator.namespace_path(navigator.find_node_scoped(parent, name))
-        lines << "#{src}.constants do | n |"
-        lines << "  #{dst}.const_set(n, #{src}.const_get(n))"
-        lines << "end"
+      dst_path = module_path(node)
+      node.importedPackage&.each do | src |
+        # binding.pry
+        src_path = module_path(src)
+        line! "#{Import}.import(::#{dst_path}, ::#{src_path})"
       end
-      self << lines
+    end
+
+    def emit_enumeration node
+      names = (node.ownedLiteral || []).map(&:name)
+      return "" if names.empty?
+      line!
+      line! "  include(#{Enumeration})"
+      line! "  def self.enumeration_names"
+      line! "    @__enumeration_names__ ||= #{names.inspect}.map!(&:freeze).freeze"
+      line! "  end"
+      line!
     end
 
     def emit_generalization node
@@ -93,27 +122,23 @@ module RUML::Compiler
       parent = node.namespace
       generals = (node.generalization || []).map(&:general)
       generals.map! do |g|
-        path = navigator.convert_to_name_path(g)
-        node = navigator.find_node(parent, path)
+        node = find_node_scoped(parent, g)
         navigator.path_str(node)
       end
-
-      lines = []
       if node._.isAbstract
-        lines << "#{node_path}.include(#{Uninstantiable})"
+        line! "#{node_path}.include(#{Uninstantiable})"
       else
-        lines << "#{node_path}.include(#{Instantiable})"
+        line! "#{node_path}.include(#{Instantiable})"
       end
-      node._.superClass_remaining.each do | super_ |
-        gen_path = navigator.path_str(navigator.find(parent, super_))
-        lines << "#{node_path}.include(#{gen_path}::RUML_InstanceBehavior)"
+      node._.superClass_remaining&.each do | super_ |
+        gen_path = navigator.path_str(find_node_scoped(parent, super_))
+        line! "#{node_path}.include(#{gen_path}::RUML_InstanceBehavior)"
       end
       generals.each do | gen_path |
-        lines << "#{node_path}.include(#{gen_path}::RUML_InstanceBehavior)"
+        line! "#{node_path}.include(#{gen_path}::RUML_InstanceBehavior)"
       end
-      lines << "#{node_path}.include(#{node_path}::RUML_InstanceBehavior)"
-      lines << "#{node_path}.extend(#{node_path}::RUML_ModuleBehavior)"
-      self << lines
+      line! "#{node_path}.include(#{node_path}::RUML_InstanceBehavior)"
+      line! "#{node_path}.extend(#{node_path}::RUML_ModuleBehavior)"
     end
 
     def emit_operation(node)
@@ -122,7 +147,7 @@ module RUML::Compiler
       if ! body && node._.blk
         body = extract_method_body(node._.blk.source.to_s)
       end
-      self << "module " << path_module(node) << "\n"
+      line! "module ", path_module(node)
       self << <<"RUBY"
 def #{name}
   #{body}
@@ -151,40 +176,35 @@ RUBY
 
     def emit_constant(node)
       name_upper = node.name.to_s.upper
-      lines = []
-      lines << "module " << path_module(node)
+      line! "module " << path_module(node)
       if method
-          lines << <<"RUBY"
+          line! <<"RUBY"
         def self.#{node.name} ; #{name_upper} ; end
         def #{node.name} : #{name_upper} ; end
 RUBY
-        end
-      self << <<"RUBY"
-#{name_upper} = #{value}
-RUBY
-      lines << "end"
-      self << lines
+      end
+      line! "#{name_upper} = #{value}"
+      line! "end"
     end
 
     def emit_property node
-      # opts = node._.opts ||= {}
-      name = node.name
-      type = navigator.path_str(node.type)
-      multiplicity = coerce_multiplicity(node.multiplicity)
-      opts = {primitive: hasStereotype?(node.type, :primitive)}
-      node._.resolved_type = type
-      node._.multiplicity = multiplicity
-      self << "module " << path_module(node) << "\n"
-      self << generate_property(name, type, multiplicity, opts)
-      self << "end\n"
+      line! generate_property(node)
     end
 
-    def generate_property node, opts
+    def generate_property node, opts = {}
+      node_path = namespace_str(node.class)
+      type_node = node.type
+      binding.pry if ::Array === type_node
+      type_node = type_node[0] if ::Array === type_node # !!!
+      type_name = namespace_str(type_node)
+      opts = {primitive: hasStereotype?(type_node, :primitive)}.merge(opts)
       name, type, lower, upper, default =
-        node.name, node.type, node.lower, node.upper, node.default
+        node.name, type_name, node.lower, node.upper, node.default
 
-      desc = "Property : #{node.owner}.#{name} : #{type} #{lower}..#{upper < 0 ? "*" : upper}"
+      desc = "Property : #{node_path}::#{name} : #{type} #{lower}..#{upper < 0 ? "*" : upper}"
       desc << " = #{default}" unless default.nil?
+
+      name = fix_name(name)
 
       if opts[:primitive]
         coerce = lambda { | _msg |
@@ -197,7 +217,7 @@ RUBY
         coerce = LAMBDA_NIL
         typecheck = lambda { | msg |
           <<"RUBY"
-raise ::ArgumentError, "#{msg}: expected #{type}" unless __val.nil? || #{type} === __val
+raise ::ArgumentError, "#{msg}: #{desc} : expected #{type}" unless __val.nil? || #{type} === __val
 RUBY
         }
       end
@@ -205,7 +225,7 @@ RUBY
       typecheck_min = if lower == 1
         lambda { | msg |
           <<"RUBY"
-raise ::ArgumentError, #{desc.inspect} if __val.nil?
+raise ::ArgumentError, "#{msg}: #{desc}" if __val.nil?
 RUBY
         }
       else
@@ -340,10 +360,8 @@ RUBY
       code
     end
 
-
     def path_module(node)
       result = _path_module(node)
-      binding.pry if result.nil? || result.empty?
       result
     end
     def _path_module(node)
@@ -351,76 +369,25 @@ RUBY
       node._.isStatic ? parent._.ruby_module_behavior : parent._.ruby_instance_behavior
     end
 
-    def emit_association(
-      name1, type1, multiplicity1, opts1,
-      name2, type2, multiplicity2, opts2
-    )
-=begin
-      $stderr.puts \
-"  # association #{name1.inspect}, #{type1.inspect}, #{multiplicity1.inspect}, #{opts1.inspect},
-                 #{name2.inspect}, #{type2.inspect}, #{multiplicity2.inspect}, #{opts2.inspect}"
-=end
-      opts1 ||= EMPTY_Hash
-      opts2 ||= EMPTY_Hash
-      type1 ||= self
-      type2 or raise ArgumentError
-      name1 ||=
-        begin
-          x = type1.to_s
-          x.sub!(/.*::/, '')
-          x[0 .. 0].downcase + x[1 .. -1]
-        end
-      multiplicity1 ||= (1 .. 1)
-      multiplicity1 = _coerce_multiplicity multiplicity1
-      name1 = name1.to_s
-      name1 = "_#{name1}" if name1 == 'class'
-
-      name2 ||=
-        begin
-          x = type2.to_s
-          x.sub!(/.*::/, '')
-          x[0 .. 1].downcase + x[1 .. -1]
-        end
-      multiplicity2 ||= (1 .. 1)
-      multiplicity2 = _coerce_multiplicity multiplicity2
-      opts2 ||= EMPTY_Hash
-      name2 = name2.to_s
-      name2 = "_#{name2}" if name2 == 'class'
-
-=begin
-      $stderr.puts \
-"  # _association #{name1.inspect}, #{type1.inspect}, #{multiplicity1.inspect}, #{opts1.inspect},
-                 #{name2.inspect}, #{type2.inspect}, #{multiplicity2.inspect}, #{opts2.inspect}"
-=end
-
-      end1 = { :name => name1.to_sym, :type => type1, :lower => multiplicity1.first, :upper => multiplicity1.last }.update(opts1)
-      end2 = { :name => name2.to_sym, :type => type2, :lower => multiplicity2.first, :upper => multiplicity2.last }.update(opts2)
-
-      generate_association(end1, end2)
-    end
-
-    def generate_association end1, end2
-      [ [ :end1, end1, end2 ], [ :end2, end2, end1 ] ].map do | (side, e, o) |
-        upper = o.upper
-        upper = :* if upper < 0
-        args = [o.name, o.type, o.lower, upper, o.subsets, e.name, e.type ]
-        desc = "Association : #{e.type}.#{o.name} : #{o.type} #{o.lower}..#{upper}"
-        code = "  ##RUML #{desc}\n"
-        if upper == 1
-          code << generate_association_1(*args)
-        else
-          code << generate_association_N(*args)
-        end
-        {
-          side: side,
-          code: code,
-          end1: end1,
-          end2: end2,
-        }
+    def emit_association node
+      e = node
+      o = e.opposite or raise
+      binding.pry
+      upper = o.upper
+      upper = :* if upper < 0
+      args = [o.name, o.type, o.lower, upper, o.subsets, e.name, e.type ]
+      desc = "Association : #{e.type}.#{o.name} : #{o.type} #{o.lower}..#{upper}"
+      code = "  ##RUML #{desc}\n"
+      if upper == 1
+        code << generate_association_1(*args)
+      else
+        code << generate_association_N(*args)
       end
+      line! code
     end
 
     def generate_association_1 name, type, lower, upper, subsets, ename, etype
+      name = fix_name(name)
       code = <<"RUBY"
   def #{name}
     @#{name}
@@ -464,6 +431,7 @@ RUBY
     end
 
     def generate_association_N name, type, lower, upper, subsets, ename, etype
+      name = fix_name(name)
       code = <<"RUBY"
   def #{name}
     @#{name} ||= [ ]
@@ -545,12 +513,11 @@ RUBY
     end
 
     META_TO_MODULE_CLASS = {
-      package: "module",
-      namespace: "module",
-      class: "class",
-      root: nil,
+      Package: "module",
+      Namespace: "module",
+      Class: "class",
+      Root: nil,
     }.freeze
-
 
     LAMBDA_NIL = proc { nil } unless defined? LAMBDA_NIL
 
@@ -559,5 +526,24 @@ RUBY
       node.stereotype&.find{|x| x.name == name}
     end
 
-  end # module
+    def find_node_scoped(node, name)
+      return name unless ::String === name
+      navigator.find_node_scoped(node, name)
+    end
+
+    def namespace_str(node)
+      navigator.namespace_str(node)
+    end
+
+    def fix_name name
+      KEYWORDS.include?(name) ? "#{name}_" : name
+    end
+
+    KEYWORDS = %w[
+      if then else end begin
+      case when
+      try catch raise
+      class module
+    ].freeze
+  end
 end # module

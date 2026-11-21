@@ -36,6 +36,11 @@ module RUML
         self
       end
 
+      def line! *args
+        args.each{|x| self << x << " "}
+        self << "\n"
+      end
+
       def to_s
         out.string
       end

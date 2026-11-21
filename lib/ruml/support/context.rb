@@ -1,9 +1,11 @@
 # frozen_string_literal: true
 
+require 'ruml/support'
+
 module RUML
   module Support
     class Context
-      attr_accessor :current
+      attr_accessor :current, :name
 
       def initialize name=nil
         @name = nil
@@ -23,23 +25,23 @@ module RUML
         end
       end
     end
-  end
 
-  class Contexts
-    def initialize
-      @contexts = Hash.new do | h, k |
-        h[k] = ::RUML::Support::Context.new(k)
+    class Contexts
+      def initialize
+        @contexts = Hash.new do | h, k |
+          h[k] = ::RUML::Support::Context.new(k)
+        end
       end
-    end
-    def [] k ; @contexts[k] ; end
-    def method_missing sel, *args, &blk
-      case
-      when blk && args.size == 1
-        @contexts[sel].with(args[0], &blk)
-      when args.empty?
-        @contexts[sel].current
-      else
-        super
+      def [] k ; @contexts[k] ; end
+      def method_missing sel, *args, &blk
+        case
+        when blk && args.size == 1
+          @contexts[sel].with(args[0], &blk)
+        when args.empty?
+          @contexts[sel].current
+        else
+          super
+        end
       end
     end
   end

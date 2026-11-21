@@ -1,259 +1,403 @@
 # frozen_string_literal: true
 
-require 'ruml/boot'
+require 'ruml'
 require 'ruml/core/runtime'
+require 'ruml/compiler'
+require 'ruml/core/navigation'
 require 'ruml/core/notation'
-require 'ruml/compiler/target/ruby'
+require 'ruml/boot/factory'
+require 'ruml/support/navigable'
 require 'ruml/support/basic_object'
+require 'ruml/compiler/ast'
+require 'ruml/compiler/native'
+require 'ruml/support/logging'
 require 'ruml/support/context'
-require 'binding_of_caller'
+require 'ruml/compiler/frontend'
 
-module RUML::Boot
-  class Builder
-    BasicObject = ::RUML::Support::BasicObject
-    Enumeration = ::RUML::Core::Runtime::Enumeration
-    NotationError = ::RUML::Core::NotationError
-    Error = ::RUML::Error
+module RUML
 
-    class Node < BasicObject::Base
-      def _desc_ ; @_repr.inspect ; end
-      def _ ; @_ ||= BasicObject::Base.new ; end
-    end
-    Notation = RUML::Core::Notation
+  # Understands a small DSL for UML modeled in subset of UML Substructure.
+  class Boot::Builder
+    include Support::Logging
+    attr_reader :created, :root, :contexts
+    Navigation = ::RUML::Core::Navigation
+    Misc = ::RUML::Support::Misc
 
-    def initialize opts={}
-      @root = opts.fetch(:root)
-      @state = :active
-      @items = []
-      @pass = 0
-      @target = RUML::Compiler::Target::Ruby.new
-      @info = Hash.new {|h, k| h[k] = BasicObject::Base.new({})}
-      @notation = Notation.new(self)
-      @trace = false
-    end
-
-    def info obj
-      @info[obj]
-    end
-
-    def begin!
-      this = self
-      ::Module.define_method(:ruml) { this }
-      self
-    end
-
-    def end!
-      @state = :end
-      ::Module.undef_method(:ruml)
-      [0, 1, 2].each do | pass|
-        @items.each do | item |
-          sel = :"_#{item.name}_#{pass}"
-          if respond_to?(sel)
-            $stderr.puts "#{self.class} : pass #{pass} #{item.inspect}" if @trace
-            send(sel, item)
-          end
-        end
+    class UniqueArray < ::Array
+      def push x
+        super(x)
+        uniq!(&:__id__)
+        self
       end
-      File.write("tmp/builder.rb", @target.to_s)
-      load("tmp/builder.rb")
-      # ::Kernel.eval(@target.to_s)
+      def << x ; push x; end
+      def concat x
+        super(x)
+        uniq!(&:__id__)
+        self
+      end
+    end
+
+    include Support::BasicObject::Repr, Support::Logging
+    def _repr ; @contexts.node ; end
+
+    def initialize opts = nil, &blk
+      @factory = RUML::Boot::Factory.new
+      @notation = RUML::Core::Notation.new(@factory)
+      @contexts = ::RUML::Support::Contexts.new
+      opts ||= { } # EMPTY_HASH
+      @opts = opts
+      @_log_verbose = true # @opts[:verbose]
+      @created = [ ]
+      @root = @opts[:root] || _build(:RUML, :Root, {})
+      @root.ownedElement = UniqueArray.new
+      @native = RUML::Compiler::Native.new
+      @stereotypes = {}
+      @object_id = 0
+      @module_proxy = {}
+      _start(&blk) if block_given?
       self
     end
 
-    ##########################################
-
-    def _import_0 item
-      item.args.each do | ns |
-        src = _resolve_value(ns, item.target)
-        dst = item.target
-        $stderr.puts("### import #{ns} -> #{src.inspect}") if @trace
-        raise "import : cannot find #{ns.inspect} in #{dst.inspect}" unless ns
-        src.constants.each do | c |
-          $stderr.puts("### import #{dst}::#{c} = #{src}::#{c}") if @trace
-          dst.send(:remove_const, c) rescue nil
-          dst.const_set(c, src.const_get(c))
+    def _start &blk
+      _with(@root, :Root) do
+        _with(@root, :Namespace) do
+          @result = instance_eval(&blk)
         end
       end
     end
 
-    def _property_1 item
-      raise NotationError, "Property : expected 1 args" if item.args.size != 1
-      notation = item.args[0]
-      prop = @notation.property(notation)
-      raise NotationError, "Property : #{notation.inspect}" unless prop
-      item.node = prop
-      prop.owner = item.target
-      prop.name = _fix_name(prop.name)
-      gen = RUML::Compiler::Target::Ruby.new
-      if item.blk
-        item.target.define_method(prop.name, &item.blk)
-        return
+    # Include a native Ruby Module into a MOF namespace:
+    def include *modules
+      (_current(:Namespace)._.ruby_include ||= UniqueArray.new).concat(modules)
+    end
+    def extend *modules
+      (_current(:Namespace)._.ruby_extend ||= UniqueArray.new).concat(modules)
+    end
+
+    def package name, &blk
+      namespace = _current(:Namespace)
+      _build(:UML, :Package, {name: name.to_s}) do | node |
+        _namespace(node, namespace, &blk)
       end
-      code = _wrap_code(item.target, gen.generate_property(prop, {}))
-      @target << code
-      # _eval_code(code)
+    end
+
+    def namespace name, &blk
+      # binding.pry
+      namespace = _current(:Namespace)
+      _build(:UML, :Namespace, {name: name.to_s}) do | node |
+        _namespace(node, namespace, &blk)
+      end
+    end
+
+    def class_ name, *args, &blk
+      args, props = _args_opts(args,
+        isAbstract: false,
+        isActive: false,
+      )
+      _args_flags(args, props,
+        isAbstract: true,
+        isActive: true,
+      )
+      namespace = _current(:Namespace)
+      props[:name] = name.to_s
+      _build(:UML, :Class, props) do | node |
+        _with(node, :Classifier) do
+          node.ownedAttribute = UniqueArray.new
+          node.ownedOperation = UniqueArray.new
+          node.generalization = UniqueArray.new
+          node.superClass = UniqueArray.new
+          _namespace(node, namespace, &blk)
+        end
+      end
+    end
+
+    def superClass *names
+      cls = _current(:Class)
+      names.each do | name |
+        cls.superClass << Misc.or_die(_find_node(cls, name))
+      end
+    end
+    alias_method :superclass, :superClass
+
+    def stereotype *names
+      node = _current(:Namespace)
+      names.each do | name |
+        _stereotype(node, name)
+      end
+    end
+
+    def generalization *args
+      specific = _current(:Classifier)
+      args.each do | name |
+        name = name.to_s
+        gen = _build(:UML, :Generalization, {})
+        general = _find_node(specific, name)
+        # if general is not found, yet, just store the name:
+        gen.general = general || name
+        gen.specific = specific
+        specific.generalization << gen
+        general.generalization << gen if general
+        # binding.pry
+      end
+    end
+
+    def property notation
+      node = @notation.property(notation)
+      raise "property : #{notation.inspect}" unless node
+      # binding.pry
+      _property(node)
+    end
+
+    def _property node
+      node.class = _current(:Class)
+      node.class.ownedAttribute << node
+      node.owner = node.class
+      node.namespace = _current(:Namespace)
+      node.namespace.ownedElement << node
+      node.association = UniqueArray.new
+      node.owningAssociation = UniqueArray.new
+      node.opposite = nil
+      # binding.pry if ::Array === node.type
+      $stderr.puts(node.type.inspect)
+      node.type = _find_node(node, node.type)
+      $stderr.puts(node.type.inspect)
+      node
+    end
+
+    def association *notations, &blk
+      owner = _current(:Namespace)
+      opts = {isDerived: false}
+      opts.update(notations.pop) if Hash === notations[-1]
+      association = _build(:UML, :Association, opts)
+      association.owner = owner
+      owner.ownedElement << association
+      association.ownedEnd = UniqueArray.new
+      association.navigableOwnedEnd = UniqueArray.new
+      association.memberEnd = UniqueArray.new
+
+      props = notations.map do | notation |
+        prop = @notation.property(notation)
+        raise "association : #{notation.inspect}" unless prop
+        _property(prop)
+        # binding.pry
+        prop.owner = association
+        association.ownedEnd << prop
+        prop.owningAssociation = association
+
+        prop.association = association
+        association.navigableOwnedEnd << prop
+
+        prop.association = association
+        association.memberEnd << prop
+        prop
+      end
+      props[0].opposite = props[1]
+      props[1].opposite = props[0].opposite
       # binding.pry
     end
 
-    def _association_1 item
-      raise NotationError, "Association : expected 2 args" if item.args.size != 2
-      props = item.args.map do | notation |
-        prop = @notation.property(notation)
-        raise NotationError, "Association : #{notation.inspect}" unless prop
-        prop.name = _fix_name(prop.name)
-        type = _resolve_type(prop.type, item.target)
-        raise NotationError, "Association : #{notation.inspect} : cannot resolve type #{prop.type.inspect}" unless type
-        prop.owner = _resolve_type(item.target, item.target)
-        prop.type = type
-        prop._.ruby_module = prop.type
-        prop
-      end
-      p1, p2 = props
-      gen = RUML::Compiler::Target::Ruby.new
-      result = gen.generate_association(p1, p2)
-      result.each do | assoc |
-        prop = assoc[:end1]
-        code = _wrap_code(prop._.ruby_module, assoc[:code])
-        @target << code
-      end
-    end
-
-    def _operation_1 item
-      raise NotationError, "Operation : expected 1 args" if item.args.size != 1
-      notation = item.args[0]
-      item.node = op = @notation.operation(notation)
-      raise NotationError, "Operation : #{notation.inspect}" unless op
-      op.name = _fix_name(op.name)
-      op._.ruby_module = item.target
-      op.parameters.each do | param |
-        param.name = _fix_name(param.name)
-        pp(param.to_h) if @trace
-        type = _resolve_type(param.type, item.target)
-        raise NotationError, "Parameter : #{param.name.inspect} : cannot resolve type #{param.type.inspect}" unless type
-        param.type = type
-      end
-    end
-
-    def _enum_1 item
-      unless info(item.target).isEnumeration
-        info(item.target).isEnumeration = true
-        @items << Item.new(item.target, :enumeration, item.target.to_s)
-      end
-      (info(item.target).enumerations ||= []) << item
-    end
-
-    def _enumeration_2 item
-      enumerations = info(item.target).enumerations
-      names = enumerations.map{|enum| enum.args[0].to_s}
-      code = <<"RUBY"
-  include(::#{Enumeration})
-  def self.names
-    @names ||= #{names.inspect}.map!(&:freeze).freeze
-  end
-RUBY
-      @target << _wrap_code(item.target, code)
-    end
-
-    ##########################################
-
-    def _resolve_type type, base
-      _resolve_value(type, base)
-    end
-
-    def _resolve_value name, base
-      return name if name.nil? || ::Module === name
-      type_path = _split_path(name)
-      base_path = _split_path(base)[0..-2]
-      _lookup_in_scope(type_path, base_path, ::Object)
-    end
-
-    def _split_path path
-      return path if ::Array === path
-      path.to_s.strip.split("::", -1).map!(&:strip).map!(&:freeze).reject(&:empty?)
-    end
-
-    def _lookup_in_scope path, base_path, root=nil
-      base_path = base_path.dup
-      base_path = [ root || @root ] if base_path.empty? || base_path[0] == ""
-      # pp(_lookup_in_scope: [path, base_path]) if @trace
-      until base_path.empty?
-        base_obj = _lookup_value(base_path, ::Object)
-        if (ns = _lookup_value(path, base_obj))
-          return ns
+    def operation notation, &blk
+      node = @notation.operation(notation)
+      raise "operation : #{notation.inspect}" unless node
+      node.class = _current(:Class)
+      node.class.ownedOperation << node
+      if blk
+        node.parameter = blk.parameters.map do |(_kind, name)|
+          _ruby_parameter(name, direction: :in)
         end
-        base_path.pop
+        node.parameter << _ruby_parameter("return", direction: :return)
+      end
+      node.parameter.each do | param |
+        param.operation = node
+        param.owner = node
+      end
+    end
+    # alias_method :method, :operation
+
+    def constant name, value=nil, &blk
+      raise "Unimplemented"
+    end
+
+    def import ns, params = {}
+      dst = _current(:Namespace)
+      if ::Module === ns
+        src = _get_module_proxy(ns)
+      else
+        name = ns.to_s
+        src = Misc.or_die(_find_node(dst, name)) do
+          "import : #{dst.name} : cannot find #{name.inspect}"
+        end
+      end
+      (dst.importedPackage ||= UniqueArray.new) << src
+    end
+
+    def x_import name, params = {}
+      dst = _current(:Namespace)
+      params = {visibility: :public}.merge(params)
+      # !!! resolve package
+      package = _build(:UML, :Package, {name: name})
+      package.importingNamespace ||= UniqueArray.new
+      packageImport = _build(:UML, :PackageImport, params)
+      packageImport.importedPackage = package
+      package.importingNamespace << packageImport
+
+      package.ownedElement.select(&:name).each do | elem_name |
+        params = {alias: nil, visibility: public}
+        elementImport = _build(:UML, :PackageImport, params)
+        elementImport.importingNamespace = pack
       end
     end
 
-    def _lookup_value path, base_module
-      path.inject(base_module) do | mod, name |
-        if name && name != ""
-          name = name.to_sym
-          begin
-            mod.const_get(name, false)
-          rescue ::NameError
-            return nil
+    def _ruby_parameter name, props
+      _build(:UML, :Parameter, {
+          name: name,
+          type: nil, # Ruby parameters are untyped,
+          direction: :in,
+          lower: 1,
+          upper: 1,
+          default: [],
+        }.merge(props)
+      )
+    end
+
+    def enum *names
+      owner = _current(:Class)
+      _stereotype(owner, "enumeration")
+      owner.ownedLiteral ||= UniqueArray.new
+      names.each do | name |
+        name = name.to_s
+        enum = _build(:UML, :EnumerationLiteral, {name: name})
+        enum.classifer = owner
+        owner.ownedLiteral << enum
+      end
+    end
+
+    #####################################
+
+    def _namespace node, namespace, &blk
+      node.namespace = namespace
+      node.namespace.ownedElement << node if node.namespace
+      node.owner = node.namespace
+      node.stereotype = UniqueArray.new
+      _with(node, :Namespace, &blk)
+    end
+
+    def _stereotype(node, name)
+      stereotype = _get_stereotype(name)
+      node.stereotype ||= UniqueArray.new
+      node.stereotype << stereotype
+    end
+
+    def _get_stereotype(name)
+      name = name.to_s
+      (@stereotypes[name] ||= _build(:UML, :Stereotype, {name: name}))
+    end
+
+    def _get_module_proxy(mod)
+      full_path = mod.to_s
+      @module_proxy[mod.to_s] ||= begin
+        node = @native[mod]
+        @root.ownedElement << node
+        puts("_get_module_proxy(#{mod}) -> #{node.inspect}")
+        node
+      end
+    end
+
+    def _build(ns, meta, properties, blk=nil)
+      node = @factory.new(ns, meta, properties)
+      node_parent = _current(:node)
+      node_parent._.node_children << node if node_parent
+      node.owner = node_parent
+      node.ownedElement = UniqueArray.new # !!!
+      node_parent.ownedElement << node if node_parent
+      node._.to_h.update(
+        meta: meta,
+        blk: blk,
+        node_parent: node_parent,
+        node_children: UniqueArray.new,
+        ruby_native: false,
+        ruby_include: UniqueArray.new,
+        ruby_extend: UniqueArray.new,
+        ruby_module: nil,
+        # object_id: (@object_id += 1),
+      )
+      @created << node
+      if block_given?
+        _with(node, :node) do
+          _with(node, meta) do
+            yield node
           end
         end
       end
+      node
     end
 
-    def _fix_name name
-      RUBY_KEYWORDS.include?(name) ? "#{name}_" : name
+    def _args_opts args, defaults={}
+      opts = ::Hash === args[-1] ? args.pop : {}
+      [args, defaults.merge(opts)]
     end
 
-    def new ns, name, props, id = nil
-      obj = Node.new(props)
-      obj._.metatype = name.to_sym
-      obj
-    end
-
-    RUBY_KEYWORDS = %w[
-      class module
-      begin end
-      if else elsif
-      case then else
-      raise rescue ensure
-      catch throw
-    ]
-
-    def _wrap_code target, code
-      prefix = case target
-      when ::Class then "class"
-      when ::Module then "module"
-      else raise Error, "invalid target : #{target.inspect}"
+    def _args_flags args, opts, flags
+      flags.each do | arg, value |
+        opts[arg] = value if args.include?(arg)
       end
-      "\n#{prefix} ::#{target} \n#{code} \nend # #{prefix} ::#{target} \n\n"
+      opts
     end
 
-    def method_missing name, *args, &blk
-      return super(name, *args, &blk) unless @state == :active
-      target = binding.of_caller(1).receiver
-      target.include(Element)
-      # binding.pry if blk
-      @items << Item.new(target, name, args, blk)
-      # $stderr.puts(@items[-1].inspect) if @trace
-      self
-    end
-
-    class Item < Struct.new(:target, :name, :args, :blk, :node)
-    end
-
-    module ModuleMethods
-      def ruml *args, &blk
-        # this = binding.of_caller(1).receiver
-        (@@_ruml_ ||= Builder.new)._add(self, args, blk)
+    def _type_to_node x
+      case type
+      when nil, Compiler::AST::Node
+        x
+      when Module
+        _get_module_proxy(x)
+      when Symbol, String
+        x
+      else
+        raise "_to_class"
       end
-      # ::Module.include(self)
     end
 
-    module Element
-      def initialize properties=nil
-        properties&.each do | k, v |
-          instance_variable_set(:"@#{k}", v)
-          # send(:"#{k}=", v)
-        end
+    def _find_node(node, name)
+      return name if ::RUML::Compiler::AST::Node === name
+      Navigation.find_node_scoped(node.namespace, name.to_s)
+    end
+
+    def _name arg
+      case arg
+      when ::String, ::Symbol then arg.to_s
+      when Compiler::AST::Node then arg.name
       end
+    end
+
+    def _desc node
+      path_str = Navigation.namespace_str(node)
+      "#{self.class} #{node.inspect} @ #{path_str}"
+    end
+
+    def _current(name)
+      @contexts[name.to_sym].current
+    end
+
+    def _with(node, name=nil, &blk)
+      name ||= node._.meta.to_sym
+      @contexts[name].with(node, &blk)
+    end
+
+    def compile(opts = { })
+      opts = @opts.merge(opts)
+      c = Compiler::Frontend.new(opts)
+      c.run(@root)
+      target = c.target
+      puts(target.to_s)
+      binding.pry
+      c
+    end
+
+    #####################################
+
+    def inspect detail=false
+      return super() if detail
+      "#<#{self.class} ...>"
     end
   end
 end

@@ -1,25 +1,29 @@
 # frozen_string_literal: true
 
+require 'ruml/boot'
 require 'ruml/core/runtime'
 require 'ruml/core/primitive_types'
 require 'ruml/boot/builder'
 
 module RUML::Boot::Model
-  RUML::Boot::Builder.new(root: self).begin!
   PrimitiveTypes = RUML::Core::PrimitiveTypes
 
-  module UML
-    ruml.import "PrimitiveTypes"
+  RUML::Boot::Builder.new(root_namespace: self) do
+  namespace :UML do
+    import PrimitiveTypes
 
-    class Element
-      ruml.association \
+    # 7.4.2 Abstract Syntax
+    class_ :Element do
+      association \
         "+owner : Element 0..1 {readOnly, union}", \
         "+/ownedElement : Element * {readOnly, union}"
     end
-    class NamedElement < Element
-      ruml.property "+ name : String [0..1]"
-      ruml.property "+ visibility : VisibilityKind [0..1]"
-      ruml.property "+ /qualifiedName : String [0..1] {readOnly}" do
+
+    class_ :NamedElement do
+      generalization :Element
+      property "+ name : String [0..1]"
+      property "+ visibility : VisibilityKind [0..1]"
+      property "+ /qualifiedName : String [0..1] {readOnly}" do
         node, path = self, nil
         while node
           (path ||= []) << node.name if node && node != ""
@@ -28,105 +32,190 @@ module RUML::Boot::Model
         path.reverse!.join("::") if path
       end
     end
-    class Comment < Element
-      ruml.property "+ body : String [0..1]"
-      ruml.association \
+
+    class_ :TypedElement, :isAbstract do
+      generalization :Element
+    end
+
+    class_ :PackageableElement, :isAbstract do
+      generalization :Element
+    end
+
+    class_ :ValueSpecification, :isAbstract do
+      generalization :Element
+    end
+
+    class_ :LiteralSpecification, :isAbstract do
+      generalization :ValueSpecification
+    end
+
+    # 7.8.5 DirectedRelationship [Abstract Class]
+    class_ :DirectedRelationship, :isAbstract do
+    end
+
+    # 8.15 Relationship [Abstract Class]
+    class_ :Relationship, :isAbstract  do
+      generalization :Element
+      # /relatedElement : Element [1..*]{union} (opposite A_relatedElement_relationship::relationship)
+      # Specifies the elements related by the Relationship.
+    end
+
+    # 7.7.2 Abstract Syntax
+    class_ :OpaqueExpression do
+      property "body : String [0..*]"
+      property "language : String [0..*]"
+    end
+
+    class_ :PackageableElement, :isAbstract do
+    end
+
+    class_ :DirectedRelationship, :isAbstract do
+    end
+
+    class_ :Dependency, :isAbstract do
+      generalization :DirectedRelationship, :PackageableElement
+    end
+
+    class_ :Abstraction do
+      generalization :Dependency
+      association \
+        "+abstraction : Abstraction 0..1 {subsets owner}",
+        "+ mapping : OpaqueExpression 0..1 {subsets ownedElement}"
+    end
+
+    class_ :Usage do
+      generalization :Dependency
+    end
+
+    class_ :Realization do
+      generalization :Dependency
+    end
+
+    class_ :Comment do
+      generalization :Element
+      property "+ body : String [0..1]"
+      association \
         "+ ownedComment : Comment * {subsets ownedElement}",
         "+ owningElement : Element 0..1 {subsets owner}"
-      ruml.association \
+      association \
         "+ ownedComment : Comment * {subsets ownedElement}" ,
         "+ annotatedElement : Element *"
     end
 
-    class Namespace < NamedElement
-      ruml.association \
+    class_ :Namespace do
+      generalization :NamedElement
+      association \
         "+ /namespace : Namespace 0..1 {readOnly, union, subsets memberNamespace, subsets owner}",
         "+ /ownedMember : NamedElement * {readOnly, union, subsets member, subsets ownedElement}"
-      ruml.association \
+      association \
         "+ /memberNamespace : Namespace * {readOnly, union, subsets memberNamespace, subsets owner}",
         "+ /member : NamedElement {readOnly, union}"
     end
 
-    class StringExpression
+    # 8.6.17 StringExpression [Class]
+
+    class_ :StringExpression do
+      operation "stringValue() : String {redefines ValueSpecification::stringValue()}"
+      association \
+        "+owningExpression : StringExpression [0..1]{subsets Element::owner}", \
+        "+subExpression : StringExpression [0..*]{ordered, subsets Element::ownedElement}"
     end
+
     #### PER XMI
-    class Package < Namespace
-      ruml.property "+ URI : String [0..1]"
+    class_ :Package do
+      generalization :Namespace
+      property "+ URI : String [0..1]"
     end
-    class PackageImport
+
+    class_ :PackageImport do
     end
-    class Type
+
+    class_ :Type do
     end
-    class Classifier < Namespace
-      ruml.property "+isAbstract : Boolean = false"
-      ruml.property "+ isFinalSpecialization : Boolean" # ???
-      ruml.association \
+
+    class_ :Classifier do
+      generalization :Namespace
+      property "+isAbstract : Boolean = false"
+      property "+ isFinalSpecialization : Boolean" # ???
+      association \
         "+ classifier : Classifier *", \
         "+ /general : Classifier *"
-      ruml.association \
+      association \
         "+ classifier : Classifier 0..1 {readOnly, union, subsets featuringClassifier,
 subsets redefinitionContext}", \
         "+ /attribute : Property * {ordered, readOnly, union, subsets
 feature, subsets redefinableElement}"
     end
-    class Class < Classifier
+
+    class_ :Class do
+      generalization :Classifier
+      property "+isAbstract : Boolean = false {redefines isAbstract}"
+      property "+isActive : Boolean = false"
     end
-    class Constraint
+
+    class_ :Constraint do
     end
-    class OpaqueExpression
-      ruml.property "+ body : String [*] {ordered, nonunique}"
-      ruml.property "+ language : String [*] {ordered}"
+
+    class_ :OpaqueExpression do
+      property "+ body : String [*] {ordered, nonunique}"
+      property "+ language : String [*] {ordered}"
     end
-    class Generalization
-      ruml.property "+ isSubstitutable : Boolean [0..1] = true"
-      ruml.association \
+
+    class_ :Generalization do
+      property "+ isSubstitutable : Boolean [0..1] = true"
+      association \
         "+specific : Classifier 1 {subsets source,
 subsets owner}", \
         "+generalization : Generalization {subsets ownedElement, subsets directedRelationship}"
-      ruml.association \
+      association \
         "+general : Classifier 1 {subsets target}", \
         "+ generalization : Generalization* {subsets
 directedRelationship}"
     end
-    class MultiplicityElement
-      ruml.property "+isOrdered : Boolean = false"
-      ruml.property "+isUnique : Boolean = true"
-      ruml.property "+/lower : Integer [0..1] = 1"
-      ruml.property "+/upper : UnlimitedNatural [0..1] = 1"
+
+    class_ :MultiplicityElement do
+      property "+isOrdered : Boolean = false"
+      property "+isUnique : Boolean = true"
+      property "+/lower : Integer [0..1] = 1"
+      property "+/upper : UnlimitedNatural [0..1] = 1"
     end
-    class StructuralFeature < MultiplicityElement
-      ruml.property "isReadOnly : Boolean [1..1] = false"
+
+    class_ :StructuralFeature do
+      generalization :MultiplicityElement, :TypedElement # :Feature
+      property "isReadOnly : Boolean [1..1] = false"
     end
-    class Property < StructuralFeature
-      ruml.property "+aggregation : AggregationKind = none"
-      ruml.property "+/default : String [0..1]"
-      ruml.property "+/isComposite : Boolean"
-      ruml.property "+isDerived : Boolean = false"
-      ruml.property "+isDerivedUnion : Boolean = false"
-      ruml.property "+isID : Boolean = false"
-      ruml.association \
+
+    class_ :Property do
+      generalization :StructuralFeature
+      property "+aggregation : AggregationKind = none"
+      property "+/default : String [0..1]"
+      property "+/isComposite : Boolean"
+      property "+isDerived : Boolean = false"
+      property "+isDerivedUnion : Boolean = false"
+      property "+isID : Boolean = false"
+      association \
         "+ ownedAttribute : Property * {ordered, subsets attribute, subsets ownedMember, redefines ownedAttribute}",
         "+ class : Class 0..1 {subsets namespace, subsets
 structuredClassifier, subsets classifier}"
-      ruml.association \
+      association \
         "+ qualifier : Property * {ordered, subsets ownedElement}",
         "+ associationEnd : Property 0..1 {subsets owner}"
-      ruml.association \
+      association \
         "+ /opposite : Property 0..1",
         "+ property : Property 0..1"
-      ruml.association \
+      association \
         "+ subsettedProperty : Property * {subsets redefinedElement}",
         "+ property : Property *"
-      ruml.association \
+      association \
         "+ property : Property * {subsets
 redefinableElement}",
         "+ redefinedProperty : Property * {subsets redefinedElement}"
     end
 
-    class Association
-      ruml.superClass :Relationship, :Classifier
-      ruml.property "+ isDerived : Boolean = false"
-      ruml.association \
+    class_ :Association do
+      generalization :Relationship, :Classifier
+      property "+ isDerived : Boolean = false"
+      association \
         "+owningAssociator : Association 0..1 {composite, subsets featuringClassifier,
 subsets namespace, subsets
 association, subsets
@@ -135,111 +224,136 @@ redefinitionContext}",
 redefinableElement, subsets
 memberEnd, subsets
 ownedMember}"
-      ruml.association \
+      association \
         "+ association : Association 0..1 {subsets owningAssociation}",
         "+ navigableOwnedEnd : Property * {subsets ownedEnd}"
-      ruml.association \
+      association \
         "+ association : Association 0..1 {subsets memberNamespace}",
         "+ memberEnd : Property 2..* {ordered, subsets member}"
-      ruml.association \
+      association \
         "+ association : Association 0..1 {subsets relationship}",
         "+ memberEnd : Type 1..* {readOnly, subsets relatedElement}"
     end
-    class AssociationClass < Association
-      ruml.superClass :Class
+
+    class_ :AssociationClass do
+      superClass :Association, :Class
     end
 
-    # class LiteralInteger
+    # class_ :LiteralInteger
     # end
-    # class LiteralUnlimitedNatural
+    # class_ :LiteralUnlimitedNatural
     # end
-    # class LiteralBoolean
+    # class_ :LiteralBoolean
     # end
-    class Parameter < MultiplicityElement
-      ruml.property "+direction : ParameterDirectionKind = in"
+    class_ :Parameter do
+      superClass :MultiplicityElement
+      property "+direction : ParameterDirectionKind = in"
     end
-    class Operation < NamedElement
-      ruml.property "+/isOrdered : Boolean = false{readOnly}"
-      ruml.property "+isQuery : Boolean = false"
-      ruml.property "+/isUnique : Boolean = true{readOnly}"
-      ruml.property "+/lower : Integer [0..1] = 1{readOnly}"
-      ruml.property "+/upper : UnlimitedNatural [0..1] = 1{readOnly}"
-      ruml.association \
+    class_ :Operation do
+      superClass :NamedElement
+      property "+/isOrdered : Boolean = false{readOnly}"
+      property "+isQuery : Boolean = false"
+      property "+/isUnique : Boolean = true{readOnly}"
+      property "+/lower : Integer [0..1] = 1{readOnly}"
+      property "+/upper : UnlimitedNatural [0..1] = 1{readOnly}"
+      association \
         "+ operation : Operation 0..1 {subsets ownerFormalParam}", \
         "+ ownedParameter : Parameter * {ordered, redefines ownedParameter}"
     end
-    class ParameterDirectionKind # < ruml.enumeration
-      ruml.enum :in
-      ruml.enum :inout
-      ruml.enum :out
-      ruml.enum :return
+    class_ :ParameterDirectionKind do #
+      stereotype :enumeration
+      enum :in
+      enum :inout
+      enum :out
+      enum :return
     end
-    class Association
-      ruml.property "+isDerived : Boolean = false"
-      ruml.association \
+
+    class_ :Stereotype do
+      superClass :Class
+    end
+
+    class_ :Association do
+      property "+isDerived : Boolean = false"
+      association \
         "+ ownedEnd : Property * {ordered, subsets feature, subsets redefinableElement, subsets memberEnd, subsets ownedMember}", \
         "+ owningAssociation : Association 0..1 {subsets featuringClassifier, subsets namespace, subsets association, subsets redefinitionContext}"
-      ruml.association \
+      association \
         "+ navigableOwnedEnd : Property * {subsets ownedEnd}", \
         "+ association : Association 0..1 {subsets owningAssociation}"
-      ruml.association \
+      association \
         "+ memberEnd : Property 2..* {ordered, subsets member}", \
         "+ association : Association 0..1 {subsets memberNamespace}"
     end
-    class InstanceValue
+
+    class_ :InstanceValue do
     end
-    class Enumeration < Class
-      ruml.association \
+
+    class_ :Enumeration do
+      superClass :Class
+    end
+
+    class_ :EnumerationLiteral do
+      property "+ name: String"
+      association \
         "+enumeration : Enumeration [1..1] {subsets namespace}", \
         "+ownedLiteral : EnumerationLiteral [0..*] {ordered, subsets ownedMember}"
+      # association \
+      #   "+/classifier : Enumeration [1..1] {redefines InstanceSpecification::classifier}", \
+      #   "+ownedLiteral : EnumerationLiteral [0..*] {ordered, subsets ownedMember}"
     end
-    class EnumerationLiteral
-      ruml.property "+ name: String"
+
+    class_ :VisibilityKind do #
+      stereotype :enumeration
+      enum :public    # "+"
+      enum :private   # "-"
+      enum :protected # "#"
+      enum :package   # "~"
     end
-    class VisibilityKind # < ruml.enumeration
-      ruml.enum :public    # "+"
-      ruml.enum :private   # "-"
-      ruml.enum :protected # "#"
-      ruml.enum :package   # "~"
+
+    class_ :AggregationKind do #
+      stereotype :enumeration
+      enum :none
+      enum :shared       # open diamond
+      enum :composite    # filled diamond
     end
-    class AggregationKind # < ruml.enumeration
-      ruml.enum :none
-      ruml.enum :shared       # open diamond
-      ruml.enum :composite    # filled diamond
-    end
-    class AggregationKind # < ruml.enumeration
-      ruml.enum :none
-      ruml.enum :shared       # open diamond
-      ruml.enum :composite    # filled diamond
+
+    class_ :AggregationKind do
+      stereotype :enumeration
+      enum :none
+      enum :shared       # open diamond
+      enum :composite    # filled diamond
     end
   end
-  module MOF
-    ruml.import "PrimitiveTypes"
-    ruml.import "UML"
 
-    # Class = UML::Class
-    # Boolean = UML::Boolean
+  package :MOF do
+    import PrimitiveTypes
+    import "UML"
 
-    module Reflection
-      class Element
-        ruml.operation "+getMetaClass() : Class {query}"
-        ruml.operation "+container() : Element {query}"
-        ruml.operation "+isInstanceOfType(type : Class, includesSubtypes: Boolean) : Boolean {query}"
+    # binding.pry
+
+    namespace :Reflection do
+      class_ :Element do
+        operation "+getMetaClass() : Class {query}"
+        operation "+container() : Element {query}"
+        operation "+isInstanceOfType(type : Class, includesSubtypes: Boolean) : Boolean {query}"
       end
     end
 
-    module Extension
-      class Tag < Reflection::Element
-        ruml.property "+ name : String"
-        ruml.property "+ value : String"
-        ruml.association \
+    namespace :Extension do
+      class_ :Tag do
+        generalization "Reflection::Element"
+        property "+ name : String"
+        property "+ value : String"
+        association \
           "+tag : Tag",
           "+element : Reflection::Element 0..*"
       end
     end
   end
-  module MOFEXT
-    Tag = MOF::Extension::Tag
+  # binding.pry
+  package :MOFEXT do
+    import "MOF::Extension"
   end
-  MODEL = ruml.end!
+end.compile(target: :Ruby).eval_code()
+# binding.pry
 end

@@ -6,23 +6,46 @@ require 'ruml/core/runtime'
 module RUML::Core
   module Navigation
     module Navigated; end
+    extend self
 
+    def for_ancestors node
+      while node
+        yield node
+        raise "for_ancestors: loop detected: #{node.inspect}" if node == node.owner
+        node = node.owner
+      end
+    end
     def namespace_path node
       result = []
-      while node
-        result << node if node.name
-        node = node.owner
+      for_ancestors(node) do | node |
+        result << node if node && node != ""
       end
       result.reverse!
     end
 
     def namespace_str(node)
-      namespace_path(node).map(&:name).compact.map!(&:to_s).reject(&:empty?).join("::")
+      join_path(namespace_path(node).map(&:name))
     end
     alias_method :path_str, :namespace_str
 
+    def join_path(names)
+      names.compact.map(&:to_s).reject(&:empty?).join("::")
+    end
+
+    def split_path(node)
+      case node
+      when ::Array
+        node
+      when ::String
+        node.split("::", -1).reject(&:empty?)
+      else
+        namespace_path(node)
+      end
+    end
+
     def root_node node # -> Node
       while node.owner
+        raise "root_node: loop detected: #{node.inspect}" if node == node.owner
         node = node.owner
       end
       node
@@ -30,39 +53,49 @@ module RUML::Core
 
     def node_ancestors node
       result = []
-      while node
-        result << node
-        node = node.owner
-      end
+      for_ancestors(node) {|node| result << node}
       result.reverse!
     end
 
     def ownedElement_by_name node, name
-      name = name.to_s
+      # binding.pry unless ::String === name
+      raise unless ::String === name
       node.ownedElement&.find{|c| c.name == name}
     end
 
-    def find_node node, names # -> Node
-      # pp(args: args, name: names)
-      if names[0] == ""
-        node = root_node(node)
-        names = names[1...-1]
+    def importedElement_by_name node, name
+      raise unless ::String === name
+      node.importedPackage&.each do | ns |
+        if (found = ownedElement_by_name(ns, name))
+          return found
+        end
       end
-      names.inject(node) do | node, name |
-        # pp(node: node, name: name)
+    end
+
+    def find_node node, path # -> Node
+      path = split_path(path)
+      # pp(args: args, name: path)
+      if path[0] == ""
+        node = root_node(node)
+        path = path[1...-1]
+      end
+      path.inject(node) do | node, name |
+        name = name.name unless ::String === name
+        binding.pry if ::Array === node
         found = ownedElement_by_name(node, name)
+        found ||= importedElement_by_name(node, name) # !!! kinda
         return nil unless found
         found
       end
     end
 
-    def find_node_scoped node, ident
-      ident = ident.to_s
-      while node
-        if (found = find_node(node, [ident]))
+    def find_node_scoped node, path
+      path = split_path(path)
+      # seen = Set.new
+      for_ancestors(node) do | node |
+        if (found = find_node(node, path))
           return found
         end
-        node = node.owner
       end
     end
 
@@ -86,7 +119,6 @@ module RUML::Core
           # ??? should this be names = namespace_path(x) since it's rooted?
           names.concat(namespace_path(x))
         else
-          binding.pry
           names.push(x.name)
           # if x.respond_to?(:name)
           #   names.push(x.name)

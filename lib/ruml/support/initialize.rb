@@ -1,6 +1,5 @@
 
 require 'ruml'
-require 'ruml/xmi/introspection'
 require 'ruml/support/traverser'
 require 'ruml/support/logging'
 

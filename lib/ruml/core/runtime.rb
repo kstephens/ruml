@@ -58,6 +58,14 @@ module Runtime
       alias :initialize :_initialize
     end
   end
+    module Import
+      def self.import dst, src
+        src.constants do | name |
+          dst.const_set(name, src.const_get())
+        end
+      end
+    end
+
     module Enumeration
       def self.included(target)
         super(target)
@@ -88,21 +96,21 @@ module Runtime
         def __ruml_coerce__ x
           case x
           when self               then x
-          when ::Symbol, ::String then by_name(x)
+          when ::Symbol, ::String then enumeration_by_name(x)
           else raise ::ArgumentError, "#{self} : invalid value #{x.inspect}"
           end
         end
         alias_method :[], :__ruml_coerce__
-        def by_name x
-          (@by_name ||=
+        def enumeration_by_name x
+          (@enumeration_by_name ||=
             (
-              enums.map{|e| [e.name.to_s.freeze, e]} +
-              enums.map{|e| [e.name.to_sym, e]}
+              enumerations.map{|e| [e.name.to_s.freeze, e]} +
+              enumerations.map{|e| [e.name.to_sym, e]}
             ).to_h.freeze
           ).fetch(x)
         end
-        def enums
-          @enums ||= names.map{|name| new(name: name.to_s.freeze)}.freeze
+        def enumerations
+          @__enumerations__ ||= enumeration_names.map{|name| new(name: name.to_s.freeze)}.freeze
         end
       end
     end

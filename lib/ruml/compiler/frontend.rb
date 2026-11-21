@@ -6,11 +6,14 @@ require 'ruml/core/runtime'
 require 'ruml/support/logging'
 require 'ruml/compiler/ast'
 require 'ruml/compiler/target/ruby'
+require 'ruml/core/navigation'
 
 module RUML
   module Compiler
   class Frontend
     class Error < CompilerError ; end
+    Navigation = RUML::Core::Navigation
+
     include RUML::Support::Logging::Basic
     EMPTY_ARRAY = [ ].freeze unless defined? EMPTY_ARRAY
 
@@ -32,9 +35,12 @@ module RUML
     end
 
     def run node
+      @target.emit_preamble(node)
       @target.emit_root(node) do
         compile(node)
       end
+      @target.emit_postamble(node)
+      self
     end
 
     def eval_code()
@@ -63,27 +69,27 @@ module RUML
       _compile_ownedElement(node)
     end
 
-    def compile_root_1 node
+    def compile_Root_1 node
       @pass = 1
       node.ownedElement.each {|x| compile(x) }
       @pass = 2
       node.ownedElement.each {|x| compile(x) }
-      @pass = 3
-      node.ownedElement.each {|x| compile(x) }
+      # @pass = 3
+      # node.ownedElement.each {|x| compile(x) }
     end
 
-    def compile_class node
-      send("compile_namespace_#{pass}", node)
+    def compile_Class node
+      send("compile_Namespace_#{pass}", node)
     end
 
-    def compile_package node
+    def compile_Package node
       node._.superClass_remaining ||= []
-      send("compile_namespace_#{pass}", node)
+      send("compile_Namespace_#{pass}", node)
     end
 
-    def compile_namespace_1 node
-      path = node._.namespace_path
-      path_str = path.map(&:name).compact.join("::")
+    def compile_Namespace_1 node
+      path = Navigation.namespace_path(node)
+      path_str = Navigation.namespace_str(node)
       node._.to_h.update(
         path: path,
         path_str: path_str,
@@ -97,49 +103,40 @@ module RUML
       log { "}" }
     end
 
-    def compile_namespace_2 node
+    def compile_Namespace_2 node
       _compile_ownedElement node
       _compile_children node, :stereotype, :import
       _compile_generalization_2 node
       _compile_children node, :property, :association, :method, :constant
-    end
-
-    def compile_namespace_3 node
-      _compile_ownedElement node
-      _compile_children node, :association
+      # _compile_enumeration node
     end
 
     def _compile_generalization_2 node
       @target.emit_generalization(node)
     end
 
-    def compile_operation_2 node
+    def compile_Operation_2 node
       @target.emit_operation(node)
     end
 
-    def compile_constant_2 node
+    def compile_Constant_2 node
       @target.emit_constant(node)
     end
 
-    def compile_import_2 node
+    def compile_Import_2 node
       @target.emit_import(node)
     end
 
-    def compile_stereotype_2 node
+    def compile_Stereotype_2 node
       args = node._.args
     end
 
-    def compile_property_2 node
-      @target.emit_property(node)
-    end
-
-    def compile_association_3 node
-      # binding.pry
-      args = node._.args
-      owner = node.namespace
-      args[1] = owner._.lookup_node(args[1])._.path_str
-      args[5] = owner._.lookup_node(args[5])._.path_str
-      @target.emit_association(:NOT_IMPLEMENTED, *args)
+    def compile_Property_2 node
+      if node.owningAssociation
+        @target.emit_association(node)
+      else
+        @target.emit_property(node)
+      end
     end
 
     ######################################################

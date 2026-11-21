@@ -23,6 +23,7 @@ module RUML::Core
           type: h[:type]&.to_s,
           lower: range.begin,
           upper: range.end,
+          aggregation: :none,
           default: h[:default],
           isOrdered: pms.include?("ordered") && !pms.include?("unordered"),
           isUnique: !pms.include?("nonunique"),
@@ -55,11 +56,11 @@ module RUML::Core
           visibility: visibility(prefix[:visibility]),
           isDerived: !!prefix[:isDerived],
           name: prefix[:name],
-          parameters: params,
+          parameter: params,
         }
         # binding.pry if $stop_here
         if suffix[:type]
-          op[:parameters] << _new(
+          op[:parameter] << _new(
             :UML, :Parameter,
             type: suffix[:type],
             name: "return",

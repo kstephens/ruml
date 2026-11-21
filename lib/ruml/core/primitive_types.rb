@@ -3,8 +3,7 @@
 require 'ruml'
 require 'ruml/core/runtime'
 
-module RUML
-  module Core
+module RUML::Core
     module PrimitiveType
       class CoercionError < RUML::Error; end
       UNLIMITED = 12345678901234567890
@@ -22,7 +21,7 @@ module RUML
       def self.to_native type, value
         type.__ruml_coerce__(value)
       rescue
-        raise CoercionError, "cannot coerce #{value.inspect} to #{type.inspect}"
+        raise ::RUML::Core::PrimitiveType::CoercionError, "cannot coerce #{value.inspect} to #{type.inspect}"
       end
     end
 
@@ -105,5 +104,4 @@ module RUML
         end
       end
     end
-  end
 end
