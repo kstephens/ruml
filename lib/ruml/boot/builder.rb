@@ -5,6 +5,7 @@ require 'ruml/core/runtime'
 require 'ruml/compiler'
 require 'ruml/core/navigation'
 require 'ruml/core/notation'
+require 'ruml/core/misc'
 require 'ruml/boot/factory'
 require 'ruml/support/navigable'
 require 'ruml/support/basic_object'
@@ -19,24 +20,9 @@ module RUML
   # Understands a small DSL for UML modeled in subset of UML Substructure.
   class Boot::Builder
     include Support::Logging
-    attr_reader :created, :root, :contexts
-    Navigation = ::RUML::Core::Navigation
+    attr_reader :created, :root, :contexts, :navigator
     Misc = ::RUML::Support::Misc
-
-    class UniqueArray < ::Array
-      def push x
-        super(x)
-        uniq!(&:__id__)
-        self
-      end
-      def << x ; push x; end
-      def concat x
-        super(x)
-        uniq!(&:__id__)
-        self
-      end
-    end
-
+    UniqueArray = ::RUML::Core::Misc::UniqueArray
     include Support::BasicObject::Repr, Support::Logging
     def _repr ; @contexts.node ; end
 
@@ -44,6 +30,7 @@ module RUML
       @factory = RUML::Boot::Factory.new
       @notation = RUML::Core::Notation.new(@factory)
       @contexts = ::RUML::Support::Contexts.new
+      @navigator = RUML::Core::Navigation::Navigator.new
       opts ||= { } # EMPTY_HASH
       @opts = opts
       @_log_verbose = true # @opts[:verbose]
@@ -122,7 +109,7 @@ module RUML
     def stereotype *names
       node = _current(:Namespace)
       names.each do | name |
-        _stereotype(node, name)
+        _add_stereotype(node, name)
       end
     end
 
@@ -141,35 +128,38 @@ module RUML
       end
     end
 
-    def property notation
-      node = @notation.property(notation)
-      raise "property : #{notation.inspect}" unless node
-      # binding.pry
-      _property(node)
+    def property notation, &blk
+      owner = _current(:Class)
+      prop = @notation.property(notation)
+      raise "property : #{notation.inspect}" unless prop
+      _setup_property(prop, owner)
+      prop._.blk = blk
+      prop
     end
 
-    def _property node
-      node.class = _current(:Class)
-      node.class.ownedAttribute << node
-      node.owner = node.class
-      node.namespace = _current(:Namespace)
-      node.namespace.ownedElement << node
-      node.association = UniqueArray.new
-      node.owningAssociation = UniqueArray.new
-      node.opposite = nil
-      # binding.pry if ::Array === node.type
-      $stderr.puts(node.type.inspect)
-      node.type = _find_node(node, node.type)
-      $stderr.puts(node.type.inspect)
-      node
+    def _setup_property(prop, owner)
+      prop.class = owner
+      prop.owner = owner
+      binding.pry unless owner.ownedAttribute
+      owner.ownedAttribute << prop
+      prop.namespace = owner
+      owner.ownedElement << prop
+      prop.association = nil
+      prop.owningAssociation = nil
+      prop._.type_name ||= prop.type
+      prop.type = Misc.or_die(_find_node(prop, prop.type)) { "cannot find #{prop.type.inspect}"}
+      prop
     end
 
     def association *notations, &blk
       owner = _current(:Namespace)
       opts = {isDerived: false}
       opts.update(notations.pop) if Hash === notations[-1]
+      raise ArgumentError, "#{owner} #{notations.size}" if notations.size != 2
+
       association = _build(:UML, :Association, opts)
       association.owner = owner
+      association.namespace = owner
       owner.ownedElement << association
       association.ownedEnd = UniqueArray.new
       association.navigableOwnedEnd = UniqueArray.new
@@ -177,23 +167,54 @@ module RUML
 
       props = notations.map do | notation |
         prop = @notation.property(notation)
-        raise "association : #{notation.inspect}" unless prop
-        _property(prop)
         # binding.pry
-        prop.owner = association
-        association.ownedEnd << prop
-        prop.owningAssociation = association
+        prop._.type_name ||= prop.type
+        prop.type = Misc.or_die(_find_node(association, prop.type))  { "#{association.inspect} : cannot find #{prop.type.inspect}"}
+        prop
+      end
+      [props, props.reverse].each do | (p1, p2) |
+        p1.opposite = p2
+        p1.owner = p2.type
+        # binding.pry
+      end
+      props.each do | prop |
+        owner = prop.owner
+        # binding.pry unless owner && owner.ownedAttribute
+        _setup_property(prop, prop.owner)
 
-        prop.association = association
+        association.ownedEnd << prop
+        prop.owningAssociation ||= association
+
+        prop.association ||= association
         association.navigableOwnedEnd << prop
 
-        prop.association = association
+        prop.association ||= association
         association.memberEnd << prop
         prop
       end
-      props[0].opposite = props[1]
-      props[1].opposite = props[0].opposite
       # binding.pry
+    end
+
+    def _find_property(notation, owner)
+      node = @notation.property(notation)
+      owner = _find_node(node, node.type)
+      owner = owner[0] if ::Array === owner
+      # binding.pry unless owner
+      if (prop = navigator.ownedElement_by_name(owner, node.name))
+        prop.subsets.concat(mode.subsets).uniq!
+        binding.pry
+      else
+        prop = node
+        node.class = owner
+        node.class.ownedAttribute << node
+        node.owner = owner
+        node.namespace = owner
+        node.namespace.ownedElement << node
+        node.association = nil
+        node.owningAssociation = nil
+        node.opposite = nil
+      end
+      prop
     end
 
     def operation notation, &blk
@@ -262,7 +283,7 @@ module RUML
 
     def enum *names
       owner = _current(:Class)
-      _stereotype(owner, "enumeration")
+      _add_stereotype(owner, "enumeration")
       owner.ownedLiteral ||= UniqueArray.new
       names.each do | name |
         name = name.to_s
@@ -282,7 +303,7 @@ module RUML
       _with(node, :Namespace, &blk)
     end
 
-    def _stereotype(node, name)
+    def _add_stereotype(node, name)
       stereotype = _get_stereotype(name)
       node.stereotype ||= UniqueArray.new
       node.stereotype << stereotype
@@ -298,7 +319,7 @@ module RUML
       @module_proxy[mod.to_s] ||= begin
         node = @native[mod]
         @root.ownedElement << node
-        puts("_get_module_proxy(#{mod}) -> #{node.inspect}")
+        # puts("_get_module_proxy(#{mod}) -> #{node.inspect}")
         node
       end
     end
@@ -310,6 +331,7 @@ module RUML
       node.owner = node_parent
       node.ownedElement = UniqueArray.new # !!!
       node_parent.ownedElement << node if node_parent
+      # node.stereotype = UniqueArray.new
       node._.to_h.update(
         meta: meta,
         blk: blk,
@@ -359,7 +381,9 @@ module RUML
 
     def _find_node(node, name)
       return name if ::RUML::Compiler::AST::Node === name
-      Navigation.find_node_scoped(node.namespace, name.to_s)
+      result = navigator.find_node_scoped(node.namespace, name.to_s)
+      result = result[0] if ::Array === result
+      result
     end
 
     def _name arg
@@ -370,7 +394,7 @@ module RUML
     end
 
     def _desc node
-      path_str = Navigation.namespace_str(node)
+      path_str = navigator.namespace_str(node)
       "#{self.class} #{node.inspect} @ #{path_str}"
     end
 
@@ -388,8 +412,8 @@ module RUML
       c = Compiler::Frontend.new(opts)
       c.run(@root)
       target = c.target
-      puts(target.to_s)
-      binding.pry
+      # puts(target.to_s)
+      # binding.pry
       c
     end
 

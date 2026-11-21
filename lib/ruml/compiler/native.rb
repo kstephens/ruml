@@ -2,26 +2,27 @@
 
 require 'ruml/core'
 require 'ruml/compiler/ast'
+require 'ruml/support/misc'
 
 module RUML::Compiler
     class Native
+      include RUML::Support::Misc
+
       def initialize
         @cache = {}
+        @lookup_module = {}
       end
 
       def lookup_module name
-        name.split("::", -1).inject(::Object) do | mod, name |
-          return unless ::Module === mod
-          begin
-            mod.const_get(name, false)
-          rescue NameError
-            return nil
-          end
+        return nil if name.nil?
+        raise ArgumentError, "lookup_module : #{name.inspect}" unless ::String === name
+        unless (mod = @lookup_module[name])
+          mod = lookup_const(name)
+          return nil unless ::Module === mod
+          @lookup_module[name] = mod
         end
-      end
-
-      def parent_name x
-        x.to_s.split("::", -1)[1..-2].join("::")
+        # binding.pry unless mod
+        mod
       end
 
       def build(x)
@@ -37,35 +38,45 @@ module RUML::Compiler
 
       def prepare(x)
         x.__ruml_native__ = self
+        x.__initialize__
         x
       end
 
       class RElement < RUML::Compiler::AST::Node
-        attr_accessor :__ruml_native__, :__ruml_obj__, :owner, :ownedElement
+        attr_accessor :__ruml_native__, :__ruml_obj__, :name, :owner, :ownedElement
         alias_method :namespace, :owner
         alias_method :namespace=, :owner=
+
+        def __fail__ *args
+          raise "#{args}"
+        end
 
         def _desc_; @__ruml_obj__.inspect ; end
 
         def initialize obj
           @__ruml_obj__ = obj
           super({})
+          # __initialize__
         end
 
         def ownedElement ; @ownedElement ||= [].freeze ; end
+        alias_method :ownedElement=, :__fail__
         def __initialize__ ; end
       end
 
       class RNamespace < RElement
         def __initialize__
+          super()
           mod = @__ruml_obj__
           full_path = @__ruml_obj__.to_s
-          name = full_path.sub(/^.*::/, '')
+          name = ::RUML::Support::Misc.path_str_base(full_path)
+          # binding.pry
           kind = ::Class === mod ? "class" : "module"
           declaration = "#{kind} #{name}"
           full_declaration = "#{kind} ::#{full_path}"
           self.name = name
           _.to_h.update(
+            native: @__ruml_obj__,
             meta: :Namespace,
             blk: nil,
             path: [full_path],
@@ -79,18 +90,17 @@ module RUML::Compiler
           )
         end
 
-        def name
-          @name ||= @__ruml_obj__.to_s.sub(/^.+::/, '').freeze
-        end
-
         def owner
           return @owner if defined?(@owner)
           @owner = nil
-          parent_name = @__ruml_native__.parent_name(@__ruml_obj__)
-          mod = @__ruml_native__.lookup_module(parent_name)
+          path_str_parent = ::RUML::Support::Misc.path_str_parent(@__ruml_obj__)
+          mod = @__ruml_native__.lookup_module(path_str_parent)
+          # binding.pry unless mod
           @owner = @__ruml_native__[mod]
-          @owner = nil if parent_name == ""
+          @owner = nil unless path_str_parent
           @owner = nil if @owner == @__ruml_obj__
+          self[:owner] = @owner
+          # binding.pry unless @owner
           @owner
         end
         alias_method :namespace, :owner
@@ -103,7 +113,7 @@ module RUML::Compiler
               node = @__ruml_native__[obj]
               node.owner = self
               node
-            }.freeze
+            }.freeze.tap{|x| self[:ownedElement] = x}
         end
       end
 
@@ -113,6 +123,7 @@ module RUML::Compiler
         def __initialize__
           super()
           _.meta = :Class
+          self.superClass = []
         end
 
         def ownedOperation
@@ -122,16 +133,18 @@ module RUML::Compiler
               node = @__ruml_native__[m]
               node.owner = self
               node
-            end.freeze
+            end.freeze.tap{|x| self[:ownedOperation] = x}
         end
+        alias_method :ownedOperation=, :__fail__
       end
 
       class ROperation < RElement
+        def __initialize__
+          super()
+          self.name = @__ruml_obj__.name.to_s.dup.freeze
+        end
         def owner
           @owner ||= @__ruml_native__[@__ruml_obj__.owner]
-        end
-        def name
-          @name ||= @__ruml_obj__.name.to_s.dup.freeze
         end
         def parameter
           @parameter ||= begin

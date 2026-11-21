@@ -27,7 +27,7 @@ module RUML::Support::Misc
   def path_str_base path # -> String | nil
     return nil if path.nil?
     path = path.to_s
-    return nil unless path.include?("::")
+    return nil if path.empty?
     path.sub(/\A.*::/, '')
   end
 
@@ -35,9 +35,18 @@ module RUML::Support::Misc
     if val.nil?
       msg ||= yield if block_given?
       msg ||= caller(1)
-      raise "#{msg}"
+      raise ::ArgumentError, "#{msg}"
     end
     val
+  end
+
+  def write_readonly_file name, content=nil
+    File.chmod(0644, name)
+    File.open(name, "w+") do | io |
+      io.write(content) unless content.nil?
+      yield io if block_given?
+    end
+    File.chmod(0444, name)
   end
 end
 

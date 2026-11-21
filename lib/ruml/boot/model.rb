@@ -13,86 +13,91 @@ module RUML::Boot::Model
     import PrimitiveTypes
 
     # 7.4.2 Abstract Syntax
-    class_ :Element do
+    class_ :Element, :isAbstract do
       association \
         "+owner : Element 0..1 {readOnly, union}", \
         "+/ownedElement : Element * {readOnly, union}"
     end
 
-    class_ :NamedElement do
-      generalization :Element
+    class_ :NamedElement, :isAbstract do
+      superClass :Element
       property "+ name : String [0..1]"
       property "+ visibility : VisibilityKind [0..1]"
       property "+ /qualifiedName : String [0..1] {readOnly}" do
-        node, path = self, nil
+        node, path = self, []
         while node
-          (path ||= []) << node.name if node && node != ""
+          path << node.name if node && node != ""
           node = node.owner
         end
-        path.reverse!.join("::") if path
+        path.reverse!.join("::") unless path.empty?
       end
     end
 
     class_ :TypedElement, :isAbstract do
-      generalization :Element
+      superClass :NamedElement
     end
 
     class_ :PackageableElement, :isAbstract do
-      generalization :Element
+      superClass :NamedElement
     end
 
+    # 8.6.22 ValueSpecification [Abstract Class]
     class_ :ValueSpecification, :isAbstract do
-      generalization :Element
+      superClass :TypedElement
+      generalization :PackageableElement
     end
 
+    # 8.6.12 LiteralSpecification [Abstract Class]
     class_ :LiteralSpecification, :isAbstract do
-      generalization :ValueSpecification
+      superClass :ValueSpecification
+    end
+
+    # 7.8.15 Relationship [Abstract Class]
+    class_ :Relationship, :isAbstract do
+      superClass :Element
     end
 
     # 7.8.5 DirectedRelationship [Abstract Class]
     class_ :DirectedRelationship, :isAbstract do
+      superClass :Relationship
     end
 
     # 8.15 Relationship [Abstract Class]
     class_ :Relationship, :isAbstract  do
-      generalization :Element
+      superClass :Element
       # /relatedElement : Element [1..*]{union} (opposite A_relatedElement_relationship::relationship)
       # Specifies the elements related by the Relationship.
     end
 
+    class_ :Dependency, :isAbstract do
+      superClass :Element
+      generalization :DirectedRelationship, :PackageableElement
+    end
+
     # 7.7.2 Abstract Syntax
     class_ :OpaqueExpression do
+      superClass :Element
       property "body : String [0..*]"
       property "language : String [0..*]"
     end
 
-    class_ :PackageableElement, :isAbstract do
-    end
-
-    class_ :DirectedRelationship, :isAbstract do
-    end
-
-    class_ :Dependency, :isAbstract do
-      generalization :DirectedRelationship, :PackageableElement
-    end
-
     class_ :Abstraction do
-      generalization :Dependency
+      superClass :Dependency
       association \
         "+abstraction : Abstraction 0..1 {subsets owner}",
         "+ mapping : OpaqueExpression 0..1 {subsets ownedElement}"
     end
 
     class_ :Usage do
-      generalization :Dependency
+      superClass :Dependency
     end
 
     class_ :Realization do
-      generalization :Dependency
+      superClass :Dependency
     end
 
     class_ :Comment do
-      generalization :Element
+      superClass :Element
       property "+ body : String [0..1]"
       association \
         "+ ownedComment : Comment * {subsets ownedElement}",
@@ -103,7 +108,7 @@ module RUML::Boot::Model
     end
 
     class_ :Namespace do
-      generalization :NamedElement
+      superClass :NamedElement
       association \
         "+ /namespace : Namespace 0..1 {readOnly, union, subsets memberNamespace, subsets owner}",
         "+ /ownedMember : NamedElement * {readOnly, union, subsets member, subsets ownedElement}"
@@ -123,7 +128,7 @@ module RUML::Boot::Model
 
     #### PER XMI
     class_ :Package do
-      generalization :Namespace
+      superClass :Namespace
       property "+ URI : String [0..1]"
     end
 
@@ -134,21 +139,16 @@ module RUML::Boot::Model
     end
 
     class_ :Classifier do
-      generalization :Namespace
+      superClass :Namespace
       property "+isAbstract : Boolean = false"
       property "+ isFinalSpecialization : Boolean" # ???
       association \
         "+ classifier : Classifier *", \
         "+ /general : Classifier *"
-      association \
-        "+ classifier : Classifier 0..1 {readOnly, union, subsets featuringClassifier,
-subsets redefinitionContext}", \
-        "+ /attribute : Property * {ordered, readOnly, union, subsets
-feature, subsets redefinableElement}"
     end
 
     class_ :Class do
-      generalization :Classifier
+      superClass :Classifier
       property "+isAbstract : Boolean = false {redefines isAbstract}"
       property "+isActive : Boolean = false"
     end
@@ -194,6 +194,11 @@ directedRelationship}"
       property "+isDerivedUnion : Boolean = false"
       property "+isID : Boolean = false"
       association \
+        "+ classifier : Classifier 0..1 {readOnly, union, subsets featuringClassifier,
+subsets redefinitionContext}", \
+        "+ /attribute : Property * {ordered, readOnly, union, subsets
+feature, subsets redefinableElement}"
+      association \
         "+ ownedAttribute : Property * {ordered, subsets attribute, subsets ownedMember, redefines ownedAttribute}",
         "+ class : Class 0..1 {subsets namespace, subsets
 structuredClassifier, subsets classifier}"
@@ -216,14 +221,8 @@ redefinableElement}",
       generalization :Relationship, :Classifier
       property "+ isDerived : Boolean = false"
       association \
-        "+owningAssociator : Association 0..1 {composite, subsets featuringClassifier,
-subsets namespace, subsets
-association, subsets
-redefinitionContext}",
-        "+ownedEnd : Property * {ordered, subsets feature, subsets
-redefinableElement, subsets
-memberEnd, subsets
-ownedMember}"
+        "+owningAssociator : Association 0..1 {composite, subsets featuringClassifier, subsets namespace, subsets association, subsets redefinitionContext}",
+        "+ownedEnd : Property * {ordered, subsets feature, subsets redefinableElement, subsets memberEnd, subsets ownedMember}"
       association \
         "+ association : Association 0..1 {subsets owningAssociation}",
         "+ navigableOwnedEnd : Property * {subsets ownedEnd}"
@@ -289,11 +288,12 @@ ownedMember}"
     end
 
     class_ :Enumeration do
+      superClass :NamedElement
       superClass :Class
     end
 
     class_ :EnumerationLiteral do
-      property "+ name: String"
+      superClass :NamedElement
       association \
         "+enumeration : Enumeration [1..1] {subsets namespace}", \
         "+ownedLiteral : EnumerationLiteral [0..*] {ordered, subsets ownedMember}"

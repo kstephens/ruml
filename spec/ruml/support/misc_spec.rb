@@ -109,7 +109,7 @@ describe RUML::Support::Misc do
     end
 
     it "raises when value is nil with default message" do
-      expect { described_class.or_die(nil) }.to raise_error
+      expect { described_class.or_die(nil) }.to raise_error(::ArgumentError)
     end
 
     it "raises with provided message when value is nil" do
@@ -134,7 +134,7 @@ describe RUML::Support::Misc do
     end
 
     it "includes caller information in default message" do
-      expect { described_class.or_die(nil) }.to raise_error
+      expect { described_class.or_die(nil) }.to raise_error(::ArgumentError)
     end
   end
 end

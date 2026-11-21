@@ -4,6 +4,7 @@ require 'ruml'
 require 'ruml/compiler'
 require 'ruml/core/runtime'
 require 'ruml/support/logging'
+require 'ruml/support/misc'
 require 'ruml/compiler/ast'
 require 'ruml/compiler/target/ruby'
 require 'ruml/core/navigation'
@@ -45,13 +46,12 @@ module RUML
 
     def eval_code()
       code = @target.to_s
-      File.write("tmp/eval_code.rb", code)
-      load("tmp/eval_code.rb")
+      file = "tmp/eval_code.rb"
+      RUML::Support::Misc.write_readonly_file(file, code)
+      $stderr.puts("wrote #{file}")
+      load(file)
       # ::Kernel.eval(code)
       self
-    rescue
-      puts code # ; binding.pry
-      raise
     end
 
     def compile node
@@ -129,14 +129,6 @@ module RUML
 
     def compile_Stereotype_2 node
       args = node._.args
-    end
-
-    def compile_Property_2 node
-      if node.owningAssociation
-        @target.emit_association(node)
-      else
-        @target.emit_property(node)
-      end
     end
 
     ######################################################

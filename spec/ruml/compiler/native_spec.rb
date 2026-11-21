@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'ruml/compiler/native'
+require 'ruml/core/navigation'
 
 class RUML::Compiler::Native::TestClass
   attr_accessor :x
@@ -128,6 +129,7 @@ describe RUML::Compiler::Native do
         expect(rclass.owner.__id__).to eq(rnamespace.__id__)
       end
     end
+
     describe '#ownedOperation' do
       it "returns an empty array" do
         expect(rclass.ownedOperation.map(&:name)).to eq(["f", "x", "x="])

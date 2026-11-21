@@ -11,9 +11,6 @@ module RUML::Core
         base.extend(ClassMethods)
       end
       module ClassMethods
-        def ruml kind, *values
-          (@_ruml_ ||= Hash.new { |h, k| h[k] = [] })[kind].concat(values)
-        end
       end
       def initialize repr
         @_repr_ = repr
@@ -29,7 +26,6 @@ module RUML::Core
     module PrimitiveTypes
       class Boolean
         include PrimitiveType
-        ruml :stereotype, :primitive
 
         COERCIONS = {
           nil => false,
@@ -59,7 +55,6 @@ module RUML::Core
 
       class Integer
         include PrimitiveType
-        ruml :stereotype, :primitive
 
         def self.__ruml_coerce__ x
           Integer(x)
@@ -68,7 +63,6 @@ module RUML::Core
 
       class Real
         include PrimitiveType
-        ruml :stereotype, :primitive
 
         def self.__ruml_coerce__ x
           Float(x)
@@ -77,7 +71,6 @@ module RUML::Core
 
       class String
         include PrimitiveType
-        ruml :stereotype, :primitive
 
         def self.__ruml_coerce__ x
           x.to_s
@@ -86,7 +79,6 @@ module RUML::Core
 
       class UnlimitedNatural < Integer
         include PrimitiveType
-        ruml :stereotype, :primitive
 
         def self.__ruml_coerce__ x
           case x

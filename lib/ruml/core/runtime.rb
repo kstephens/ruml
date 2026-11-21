@@ -10,17 +10,13 @@ module Runtime
 
   module Uninstantiatable
     def self.included base
-      # super
       base.extend(ModuleMethods)
       base.include(InstanceMethods)
-      # !!!
-      # base.send(:remove_const, :ModuleMethods)
-      # base.send(:remove_const, :InstanceMethods)
     end
     module ModuleMethods
     end
     module InstanceMethods
-      def initialize *args
+      def initialize *_args
         raise UninstantiatableError, "#{self.class}"
       end
     end
@@ -28,19 +24,15 @@ module Runtime
 
   module Instantiable
     def self.included base
-      # super
       base.extend(ModuleMethods)
       base.include(InstanceMethods)
-      # !!!
-      # base.send(:remove_const, :ModuleMethods)
-      # base.send(:remove_const, :InstanceMethods)
     end
 
     module ModuleMethods
     end
 
     module InstanceMethods
-      def _initialize opts = nil, &blk
+      def __ruml_initialize__ opts = nil, &blk
         opts ||= EMPTY_Hash
         opts.each do | k, v |
           s = :"#{k}="
@@ -55,7 +47,7 @@ module Runtime
         end
         self
       end
-      alias :initialize :_initialize
+      alias :initialize :__ruml_initialize__
     end
   end
     module Import

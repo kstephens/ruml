@@ -17,6 +17,7 @@ module RUML
       def prev ; @stack[-1] ; end
       def depth ; @stack.size ; end
       def with(val)
+        # pp(with: val.inspect, name: @name)
         @stack.push(@current)
         begin
           yield(@current = val)

@@ -12,7 +12,7 @@ module RUML
     class Target
       include Support::Initialize, Support::Logging::Basic
 
-      attr_accessor :frontend, :trace
+      attr_accessor :frontend, :trace, :depth
 
       def context
         @context ||= ::RUML::Support.Contexts.new
@@ -39,6 +39,51 @@ module RUML
       def line! *args
         args.each{|x| self << x << " "}
         self << "\n"
+        self
+      end
+
+      def comment! *args
+        msg = "".dup
+        args.each{|x| msg << x << " "}
+        msg = comment_wrap(msg)
+        line! msg
+        self
+      end
+
+      def comment_wrap msg
+        "#{"  " * depth}#{comment_prefix}RUML #{msg}#{comment_suffix}"
+      end
+
+      def comment_prefix
+        "#"
+      end
+
+      def comment_suffix
+        ""
+      end
+
+      def comment_begin! *args
+        line!
+        comment! "================================================================================="
+        comment! "BEGIN", *args
+        self.depth += 1
+        line!
+      end
+
+      def comment_end! *args
+        self.depth -= 1
+        line!
+        comment! "END  ", *args
+        comment! "================================================================================="
+        line!
+      end
+
+      def depth
+        @depth ||= 0
+      end
+
+      def indent
+        "  " * depth
       end
 
       def to_s

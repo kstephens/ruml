@@ -126,6 +126,7 @@ module RUML::Core
     end
 
     def _parse rx, str, ns, name
+      str = str.gsub(/\s/, ' ')
       str = str.strip
       return unless (match = _match(rx, str))
       properties = (yield match) || match
