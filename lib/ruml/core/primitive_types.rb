@@ -5,6 +5,8 @@ require 'ruml/core/runtime'
 
 module RUML::Core
     module PrimitiveType
+      RUML_PRIMITIVE = true
+
       class CoercionError < RUML::Error; end
       UNLIMITED = 12345678901234567890
       def self.included base

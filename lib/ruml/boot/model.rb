@@ -5,17 +5,17 @@ require 'ruml/core/runtime'
 require 'ruml/core/primitive_types'
 require 'ruml/boot/builder'
 
-module RUML::Boot::Model
-  PrimitiveTypes = RUML::Core::PrimitiveTypes
+module RUML::Boot; end
+RUML::Boot::Builder.new(root: RUML::Boot) do
+    namespace :Model do
+      import RUML::Core::PrimitiveTypes
 
-  RUML::Boot::Builder.new(root_namespace: self) do
-  namespace :UML do
-    import PrimitiveTypes
+    namespace :UML do
 
     # 7.4.2 Abstract Syntax
     class_ :Element, :isAbstract do
       association \
-        "+owner : Element 0..1 {readOnly, union}", \
+        "+owner : Element 0..1 {readOnly, union}",
         "+/ownedElement : Element * {readOnly, union}"
     end
 
@@ -41,6 +41,30 @@ module RUML::Boot::Model
       superClass :NamedElement
     end
 
+    # 7.8.15 Relationship [Abstract Class]
+    class_ :Relationship, :isAbstract do
+      superClass :Element
+    end
+
+    class_ :Dependency, :isAbstract do
+      superClass :Element
+      generalization :DirectedRelationship, :PackageableElement
+    end
+
+    # 7.8.1 Abstraction [Class]
+    class_ :Abstraction do
+      superClass :Dependency
+    end
+
+    # 7.8.5 DirectedRelationship [Abstract Class]
+    class_ :DirectedRelationship, :isAbstract do
+      superClass :Relationship
+      association \
+        "/source : Element [1..*] {union, #subsets relatedElement}",
+        "/target : Element [1..*] {union, #subsets relatedElement}"
+    end
+
+
     # 8.6.22 ValueSpecification [Abstract Class]
     class_ :ValueSpecification, :isAbstract do
       superClass :TypedElement
@@ -52,33 +76,14 @@ module RUML::Boot::Model
       superClass :ValueSpecification
     end
 
-    # 7.8.15 Relationship [Abstract Class]
-    class_ :Relationship, :isAbstract do
-      superClass :Element
-    end
-
-    # 7.8.5 DirectedRelationship [Abstract Class]
-    class_ :DirectedRelationship, :isAbstract do
-      superClass :Relationship
-    end
-
-    # 8.15 Relationship [Abstract Class]
-    class_ :Relationship, :isAbstract  do
-      superClass :Element
-      # /relatedElement : Element [1..*]{union} (opposite A_relatedElement_relationship::relationship)
-      # Specifies the elements related by the Relationship.
-    end
-
-    class_ :Dependency, :isAbstract do
-      superClass :Element
-      generalization :DirectedRelationship, :PackageableElement
-    end
-
     # 7.7.2 Abstract Syntax
     class_ :OpaqueExpression do
       superClass :Element
       property "body : String [0..*]"
       property "language : String [0..*]"
+      association \
+        "+abstraction : Abstraction 0..1 {subsets owner}",
+        "+ mapping : OpaqueExpression 0..1 {subsets ownedElement}"
     end
 
     class_ :Abstraction do
@@ -115,6 +120,9 @@ module RUML::Boot::Model
       association \
         "+ /memberNamespace : Namespace * {readOnly, union, subsets memberNamespace, subsets owner}",
         "+ /member : NamedElement {readOnly, union}"
+      association \
+        "+ importer : Namespace 0..1 {readOnly, union}",
+        "+ importedPackage : Namespace * {readOnly, union, subsets member, subsets ownedElement}"
     end
 
     # 8.6.17 StringExpression [Class]
@@ -133,13 +141,22 @@ module RUML::Boot::Model
     end
 
     class_ :PackageImport do
+      superClass :DirectedRelationship
+      property "visibility : VisibilityKind [1..1] = public"
+      association \
+        "importedPackage : Package [1..1] {subsets DirectedRelationship::target}",
+        "importingNamespace : Namespace [1..1] {subsets DirectedRelationship::source, subsets Element::owner}"
+      association \
+        "+ packageImport : PackageImport * {subsets ownedElement, subsets directedRelationship}",
+        "+ importingNamespace : Namespace 1 {subsets source, subsets owner}"
     end
 
-    class_ :Type do
+      class_ :Type, :isAbstract do
     end
 
     class_ :Classifier do
       superClass :Namespace
+      generalization :PackageableElement
       property "+isAbstract : Boolean = false"
       property "+ isFinalSpecialization : Boolean" # ???
       association \
@@ -154,14 +171,17 @@ module RUML::Boot::Model
     end
 
     class_ :Constraint do
+      superClass :Element
     end
 
     class_ :OpaqueExpression do
+      superClass :Element
       property "+ body : String [*] {ordered, nonunique}"
       property "+ language : String [*] {ordered}"
     end
 
     class_ :Generalization do
+      superClass :DirectedRelationship
       property "+ isSubstitutable : Boolean [0..1] = true"
       association \
         "+specific : Classifier 1 {subsets source,
@@ -173,7 +193,8 @@ subsets owner}", \
 directedRelationship}"
     end
 
-    class_ :MultiplicityElement do
+    class_ :MultiplicityElement, :isAbstract do
+      superClass :Element
       property "+isOrdered : Boolean = false"
       property "+isUnique : Boolean = true"
       property "+/lower : Integer [0..1] = 1"
@@ -326,8 +347,8 @@ redefinableElement}",
   end
 
   package :MOF do
-    import PrimitiveTypes
     import "UML"
+    # import RUML::Core::PrimitiveTypes
 
     # binding.pry
 
@@ -350,10 +371,25 @@ redefinableElement}",
       end
     end
   end
+
   # binding.pry
   package :MOFEXT do
     import "MOF::Extension"
   end
-end.compile(target: :Ruby).eval_code()
-# binding.pry
+
+  package :XMI do
+    import "UML"
+
+    class_ :Root do
+      superclass "Element"
+      association \
+        "+root : Root 0..1",
+        "+packagedElement : Element * {subsets ownedElement}"
+    end
+  end
 end
+end.compile(
+  target: :Ruby,
+  file: "tmp/ruml-boot-model.rb",
+).eval_code()
+

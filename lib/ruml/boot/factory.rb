@@ -10,12 +10,12 @@ module RUML::Boot
       @instance_by_id = {}
     end
 
-    def new ns, meta, props, id = nil
+    def new ns, type, props, id = nil
       if id && (instance = @instance_by_id[id])
         return instance
       end
       instance = RUML::Compiler::AST::Node.new(props)
-      instance._.meta = meta
+      instance._.metatype = type
       instance._.ns = ns
       instance._.instance_id = id
       instance._.ruby_module_root = @root

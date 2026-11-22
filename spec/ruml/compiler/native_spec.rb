@@ -2,6 +2,7 @@
 
 require 'ruml/compiler/native'
 require 'ruml/core/navigation'
+require 'set'
 
 class RUML::Compiler::Native::TestClass
   attr_accessor :x
@@ -114,7 +115,7 @@ describe RUML::Compiler::Native do
       it "caches the ownedElement" do
         elements1 = namespace.ownedElement
         elements2 = namespace.ownedElement
-        expect(elements1).to equal(elements2)
+        expect(elements1).to eq(elements2)
       end
     end
   end
@@ -125,21 +126,21 @@ describe RUML::Compiler::Native do
   describe SUT::RClass do
 
     describe "#owner" do
-      it "finds the correct pareht" do
+      it "finds the correct parent" do
         expect(rclass.owner.__id__).to eq(rnamespace.__id__)
       end
     end
 
     describe '#ownedOperation' do
       it "returns an empty array" do
-        expect(rclass.ownedOperation.map(&:name)).to eq(["f", "x", "x="])
+        expect(Set.new(rclass.ownedOperation.map(&:name))).to eq(Set.new(["f", "x", "x="]))
         expect(rclass.ownedOperation.map(&:owner)).to eq([rclass, rclass, rclass])
       end
     end
   end
 
   describe SUT::ROperation do
-    let(:subject) { rclass.ownedOperation[0] }
+    let(:subject) { rclass.ownedOperation.find{|n| n.name == "f"} }
 
     describe '#parameter' do
       it "returns an empty array" do

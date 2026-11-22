@@ -19,38 +19,75 @@ module RUML
 
   # Understands a small DSL for UML modeled in subset of UML Substructure.
   class Boot::Builder
-    include Support::Logging
-    attr_reader :created, :root, :contexts, :navigator
+
+    class BuilderError < RUML::Error; end
+    class UnresolvedError < BuilderError; end
+
     Misc = ::RUML::Support::Misc
     UniqueArray = ::RUML::Core::Misc::UniqueArray
+    RetryOn = RUML::Core::Navigation::NavigationError
+
+    include Support::Logging
+    attr_reader :created, :root, :root_node, :contexts, :navigator
     include Support::BasicObject::Repr, Support::Logging
+
     def _repr ; @contexts.node ; end
 
     def initialize opts = nil, &blk
+      @opts = opts || {}
+      @_log_verbose = true # @opts[:verbose]
       @factory = RUML::Boot::Factory.new
       @notation = RUML::Core::Notation.new(@factory)
       @contexts = ::RUML::Support::Contexts.new
-      @navigator = RUML::Core::Navigation::Navigator.new
-      opts ||= { } # EMPTY_HASH
-      @opts = opts
-      @_log_verbose = true # @opts[:verbose]
-      @created = [ ]
-      @root = @opts[:root] || _build(:RUML, :Root, {})
-      @root.ownedElement = UniqueArray.new
+      @navigator = @n = RUML::Core::Navigation::Navigator.new
       @native = RUML::Compiler::Native.new
+      @_find_or = {}
+      @_with_retry = []
+      @created = [ ]
       @stereotypes = {}
       @object_id = 0
       @module_proxy = {}
+      @native_root = @native[@opts.fetch(:root)]
+      @root_node = _build(:RUML, :Root, {}) do | node |
+        node.owner = native_root
+        node.ownedElement ||= UniqueArray.new
+        node.importedPackage ||= UniqueArray.new
+      end
       _start(&blk) if block_given?
       self
     end
 
     def _start &blk
-      _with(@root, :Root) do
-        _with(@root, :Namespace) do
+      _with(@root_node, :Root) do
+        _with(@root_node, :Namespace) do
           @result = instance_eval(&blk)
         end
       end
+      # _end()
+      # self
+    end
+
+    def _end
+      total = @_with_retry.size
+      while @_with_retry.size < total
+        until @_with_retry
+          # puts(@_with_retry.size)
+          blk = @_with_retry.shift
+          begin
+            blk.call
+          rescue RetryOn
+            @_with_retry << blk
+          end
+        end
+        binding.pry
+      end
+    end
+
+    def _with_retry &blk
+      yield
+    # rescue RetryOn
+    #   binding.pry
+    #   @_with_retry << blk
     end
 
     # Include a native Ruby Module into a MOF namespace:
@@ -63,20 +100,36 @@ module RUML
 
     def package name, &blk
       namespace = _current(:Namespace)
-      _build(:UML, :Package, {name: name.to_s}) do | node |
-        _namespace(node, namespace, &blk)
+      package = _current(:Package)
+      _build(:UML, :Package, {name: name.to_s}, [name]) do | node |
+        node.nestingPackage = package
+        package.nestedPackage << node if package
+        _with_namespace(node, namespace, &blk)
       end
     end
 
     def namespace name, &blk
-      # binding.pry
+      _with_retry do
+        _namespace name, blk
+      end
+    end
+
+    def _namespace name, blk
       namespace = _current(:Namespace)
       _build(:UML, :Namespace, {name: name.to_s}) do | node |
-        _namespace(node, namespace, &blk)
+        _with_namespace(node, namespace, &blk)
       end
     end
 
     def class_ name, *args, &blk
+      _with_retry do
+        _find_or(:UML, :Class, [name]) do
+          _class_(name, args, blk)
+        end
+      end
+    end
+
+    def _class_ name, args, blk
       args, props = _args_opts(args,
         isAbstract: false,
         isActive: false,
@@ -87,24 +140,33 @@ module RUML
       )
       namespace = _current(:Namespace)
       props[:name] = name.to_s
-      _build(:UML, :Class, props) do | node |
+      _build(:UML, :Class, props, [name]) do | node |
         _with(node, :Classifier) do
           node.ownedAttribute = UniqueArray.new
           node.ownedOperation = UniqueArray.new
           node.generalization = UniqueArray.new
           node.superClass = UniqueArray.new
-          _namespace(node, namespace, &blk)
+          _with_namespace(node, namespace, &blk)
         end
       end
     end
 
     def superClass *names
-      cls = _current(:Class)
       names.each do | name |
-        cls.superClass << Misc.or_die(_find_node(cls, name))
+        _with_retry do
+          _superClass(name)
+        end
       end
     end
     alias_method :superclass, :superClass
+
+    def _superClass name
+      cls = _current(:Class)
+      scls = _find_node_scoped(cls.owner, name)
+      binding.pry unless scls
+      raise BuilderError, "superClass #{name.inspect}" unless scls
+      cls.superClass << scls
+    end
 
     def stereotype *names
       node = _current(:Namespace)
@@ -116,67 +178,94 @@ module RUML
     def generalization *args
       specific = _current(:Classifier)
       args.each do | name |
-        name = name.to_s
-        gen = _build(:UML, :Generalization, {})
-        general = _find_node(specific, name)
-        # if general is not found, yet, just store the name:
-        gen.general = general || name
-        gen.specific = specific
-        specific.generalization << gen
-        general.generalization << gen if general
-        # binding.pry
+        _with_retry do
+          _generalization specific, name
+        end
       end
+    end
+
+    def _generalization specific, name
+      name = name.to_s
+      gen = _build(:UML, :Generalization, {})
+      general = _find_node_scoped(specific.owner, name)
+      # binding.pry
+      # if general is not found, yet, just store the name:
+      gen.general = general || name
+      gen.specific = specific
+      specific.generalization ||= UniqueArray.new
+      specific.generalization << gen
+      general.generalization ||= UniqueArray.new if general
+      general.generalization << gen if general
+      # binding.pry
     end
 
     def property notation, &blk
       owner = _current(:Class)
+      _with_retry do
+        _property notation, owner, blk
+      end
+    end
+
+    def _property notation, owner, blk
       prop = @notation.property(notation)
-      raise "property : #{notation.inspect}" unless prop
+      raise BuilderError, "property : #{notation.inspect}" unless prop
       _setup_property(prop, owner)
       prop._.blk = blk
       prop
     end
 
     def _setup_property(prop, owner)
-      prop.class = owner
-      prop.owner = owner
-      binding.pry unless owner.ownedAttribute
-      owner.ownedAttribute << prop
+      prop._.type_name ||= prop.type
+      prop.type = _find_node_scoped(owner, prop.type) || prop.type
+      prop.class ||= owner
+      prop.owner ||= owner
+      # binding.pry if prop._.notation =~ /String/
+      owner.ownedAttribute << prop unless @n.isNativeModule?(owner)
       prop.namespace = owner
-      owner.ownedElement << prop
+      owner.ownedElement << prop unless navigator.isNativeModule?(owner)
       prop.association = nil
       prop.owningAssociation = nil
-      prop._.type_name ||= prop.type
-      prop.type = Misc.or_die(_find_node(prop, prop.type)) { "cannot find #{prop.type.inspect}"}
+      # binding.pry
       prop
     end
 
     def association *notations, &blk
-      owner = _current(:Namespace)
+      notations = notations.dup
+      # pp(notations: notations)
+      # pp(caller.select{|x| x =~ %r{/model\.rb|retry}})
       opts = {isDerived: false}
       opts.update(notations.pop) if Hash === notations[-1]
-      raise ArgumentError, "#{owner} #{notations.size}" if notations.size != 2
+      owner = _current(:Namespace)
+      # binding.pry if notations.empty?
+      raise BuilderError, "association : #{owner.inspect} #{notations.size}" if notations.size != 2
+      _with_retry do
+        _association notations, opts, owner, blk
+      end
+    end
 
-      association = _build(:UML, :Association, opts)
-      association.owner = owner
-      association.namespace = owner
-      owner.ownedElement << association
-      association.ownedEnd = UniqueArray.new
-      association.navigableOwnedEnd = UniqueArray.new
-      association.memberEnd = UniqueArray.new
-
+    def _association notations, opts, owner, blk
       props = notations.map do | notation |
         prop = @notation.property(notation)
-        # binding.pry
+        raise BuilderError, "association : #{notation.inspect}" unless prop
         prop._.type_name ||= prop.type
-        prop.type = Misc.or_die(_find_node(association, prop.type))  { "#{association.inspect} : cannot find #{prop.type.inspect}"}
+        prop.type = _find_node_scoped(owner, prop.type) || prop.type
+        binding.pry if ::String === prop.type
         prop
       end
       [props, props.reverse].each do | (p1, p2) |
         p1.opposite = p2
         p1.owner = p2.type
+        p1.class = p2.owner
         # binding.pry
       end
+
+      association = _build(:UML, :Association, opts)
+      association.owner = owner
+      association.namespace = owner
+      association.ownedEnd = UniqueArray.new
+      association.navigableOwnedEnd = UniqueArray.new
+      association.memberEnd = UniqueArray.new
+
       props.each do | prop |
         owner = prop.owner
         # binding.pry unless owner && owner.ownedAttribute
@@ -192,29 +281,9 @@ module RUML
         association.memberEnd << prop
         prop
       end
-      # binding.pry
-    end
 
-    def _find_property(notation, owner)
-      node = @notation.property(notation)
-      owner = _find_node(node, node.type)
-      owner = owner[0] if ::Array === owner
-      # binding.pry unless owner
-      if (prop = navigator.ownedElement_by_name(owner, node.name))
-        prop.subsets.concat(mode.subsets).uniq!
-        binding.pry
-      else
-        prop = node
-        node.class = owner
-        node.class.ownedAttribute << node
-        node.owner = owner
-        node.namespace = owner
-        node.namespace.ownedElement << node
-        node.association = nil
-        node.owningAssociation = nil
-        node.opposite = nil
-      end
-      prop
+      owner.ownedElement << association
+      # binding.pry
     end
 
     def operation notation, &blk
@@ -239,34 +308,19 @@ module RUML
       raise "Unimplemented"
     end
 
-    def import ns, params = {}
+    def import name, params = {}
       dst = _current(:Namespace)
-      if ::Module === ns
-        src = _get_module_proxy(ns)
-      else
-        name = ns.to_s
-        src = Misc.or_die(_find_node(dst, name)) do
-          "import : #{dst.name} : cannot find #{name.inspect}"
-        end
-      end
-      (dst.importedPackage ||= UniqueArray.new) << src
+      name = @native[name]
+      src = _find_node_scoped(dst, name)
+      _package_import dst, src
     end
 
-    def x_import name, params = {}
-      dst = _current(:Namespace)
-      params = {visibility: :public}.merge(params)
-      # !!! resolve package
-      package = _build(:UML, :Package, {name: name})
-      package.importingNamespace ||= UniqueArray.new
-      packageImport = _build(:UML, :PackageImport, params)
-      packageImport.importedPackage = package
-      package.importingNamespace << packageImport
-
-      package.ownedElement.select(&:name).each do | elem_name |
-        params = {alias: nil, visibility: public}
-        elementImport = _build(:UML, :PackageImport, params)
-        elementImport.importingNamespace = pack
-      end
+    def _package_import namespace, package
+      import = _build(:UML, :PackageImport, {visibility: :public})
+      package = _find_node_scoped(namespace, package)
+      import.importedPackage = package
+      import.importingNamespace = package
+      namespace.packageImport << import
     end
 
     def _ruby_parameter name, props
@@ -295,11 +349,12 @@ module RUML
 
     #####################################
 
-    def _namespace node, namespace, &blk
+    def _with_namespace node, namespace, &blk
       node.namespace = namespace
       node.namespace.ownedElement << node if node.namespace
       node.owner = node.namespace
       node.stereotype = UniqueArray.new
+      node.packageImport = UniqueArray.new
       _with(node, :Namespace, &blk)
     end
 
@@ -314,26 +369,26 @@ module RUML
       (@stereotypes[name] ||= _build(:UML, :Stereotype, {name: name}))
     end
 
-    def _get_module_proxy(mod)
-      full_path = mod.to_s
-      @module_proxy[mod.to_s] ||= begin
-        node = @native[mod]
-        @root.ownedElement << node
-        # puts("_get_module_proxy(#{mod}) -> #{node.inspect}")
-        node
+    def _find_or(ns, type, keys=[])
+      key = [ns, type, keys, _current(:node)]
+      unless (node = @_find_or[key])
+        node = yield
+        @_find_or[key] = node if node
       end
+      node
     end
 
-    def _build(ns, meta, properties, blk=nil)
-      node = @factory.new(ns, meta, properties)
+    def _build(ns, type, properties, blk=nil)
+      node = @factory.new(ns, type, properties)
       node_parent = _current(:node)
       node_parent._.node_children << node if node_parent
       node.owner = node_parent
       node.ownedElement = UniqueArray.new # !!!
       node_parent.ownedElement << node if node_parent
+      node.namespace = _current(:Namespace)
       # node.stereotype = UniqueArray.new
       node._.to_h.update(
-        meta: meta,
+        metatype: type,
         blk: blk,
         node_parent: node_parent,
         node_children: UniqueArray.new,
@@ -346,7 +401,7 @@ module RUML
       @created << node
       if block_given?
         _with(node, :node) do
-          _with(node, meta) do
+          _with(node, type) do
             yield node
           end
         end
@@ -366,25 +421,18 @@ module RUML
       opts
     end
 
-    def _type_to_node x
-      case type
-      when nil, Compiler::AST::Node
-        x
-      when Module
-        _get_module_proxy(x)
-      when Symbol, String
-        x
-      else
-        raise "_to_class"
-      end
+    def _find_node_scoped node, name
+      return name if ::RUML::Compiler::AST::Node === name
+      node = @native[node]
+      @n.find_node_scoped(node, name.to_s)
     end
 
-    def _find_node(node, name)
-      return name if ::RUML::Compiler::AST::Node === name
-      result = navigator.find_node_scoped(node.namespace, name.to_s)
-      result = result[0] if ::Array === result
-      result
-    end
+    # def _find_node_or_die node, name, *args, &blk
+    #   return name if ::RUML::Compiler::AST::Node === name
+    #   node = @native[node]
+    #   result = @n.find_node_or_die(node.namespace, name.to_s, *args, &blk)
+    #   result
+    # end
 
     def _name arg
       case arg
@@ -394,7 +442,7 @@ module RUML
     end
 
     def _desc node
-      path_str = navigator.namespace_str(node)
+      path_str = @n.namespace_str(node)
       "#{self.class} #{node.inspect} @ #{path_str}"
     end
 
@@ -403,14 +451,14 @@ module RUML
     end
 
     def _with(node, name=nil, &blk)
-      name ||= node._.meta.to_sym
+      name ||= node._.metatype.to_sym
       @contexts[name].with(node, &blk)
     end
 
     def compile(opts = { })
       opts = @opts.merge(opts)
       c = Compiler::Frontend.new(opts)
-      c.run(@root)
+      c.run(@root_node)
       target = c.target
       # puts(target.to_s)
       # binding.pry

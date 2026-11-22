@@ -26,14 +26,14 @@ module RUML
       Support.copy_method(self, :eql?, ::Object)
       Support.copy_method(self, :is_a?, ::Object)
 
-      ATTRS = %i[ns meta].freeze
+      ATTRS = %i[ns metatype].freeze
 
       def _desc_
         AST.build_desc(_repr, ATTRS)
       end
 
       def to_s
-        "#{node._.meta} #{args.map(&:inspect).join(", ")}"
+        "#{node._.metatype} #{args.map(&:inspect).join(", ")}"
       end
     end
 

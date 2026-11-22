@@ -6,6 +6,7 @@ module RUML
   EMPTY_Hash = { }.freeze
   EMPTY_String = ''.freeze
   class Error < StandardError ; end
+  class FactoryError < Error ; end
 end
 
 require 'ruml/core/runtime'

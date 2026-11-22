@@ -4,6 +4,7 @@ require 'ruml/compiler/target'
 require 'ruml/support/initialize'
 require 'ruml/support/misc'
 require 'ruml/core/runtime'
+require 'ruml/core/primitive_types'
 require 'method_source'
 require 'ripper'
 
@@ -12,13 +13,17 @@ module RUML::Compiler
     UNLIMITED = 12345678901234567890
     STAR = UNLIMITED
 
+    PrimitiveTypes = RUML::Core::PrimitiveTypes
+
     include RUML::Support::Misc
 
     def emit_preamble(node)
       line! "# frozen_string_literal: true"
       line!
       comment_begin! "GENERATED"
+      trace! '"BEGIN"'
       line! "require 'ruml/core/runtime'"
+      line! "require 'ruml/core/primitive_types'"
       line! "require 'ruml/core/misc'"
       # line! "require 'pry'"
       # line! "binding.pry"
@@ -26,12 +31,14 @@ module RUML::Compiler
     end
 
     def emit_postamble(node)
+      trace! '"END"'
       comment_end! "GENERATED"
+      # line! "binding.pry"
       line!
     end
 
     def emit_root(_node)
-      ns = frontend.root_namespace
+      ns = frontend.root
       case ns
       when ::Class
         ns = "class #{ns}"
@@ -44,10 +51,14 @@ module RUML::Compiler
     end
 
     def emit_namespace(node)
+      return if navigator.isPrimitiveType?(node) || navigator.isNativeModule?(node)
+
       path = navigator.namespace_path(node)
       path_str = navigator.path_str(node)
-      kind = META_TO_MODULE_CLASS.fetch(node._.meta)
-      declaration = "#{kind} #{path_str}"
+      kind = META_TO_MODULE_CLASS.fetch(node._.metatype)
+      desc = "#{kind} #{path_str}"
+      declaration = desc.dup
+      binding.pry if path_str =~ /PrimitiveTypes/
 
       node._.to_h.update(
         path: path,
@@ -60,7 +71,7 @@ module RUML::Compiler
       )
       log { "#{path_str} { " }
 
-      is_class = isClass?(node)
+      is_class = navigator.isClass?(node)
       if is_class
         supers = (node.superClass || []).map do |name|
           or_die(find_node_scoped(node.namespace, name)) do
@@ -75,27 +86,19 @@ module RUML::Compiler
         node._.superClass_remaining = supers
       end
 
-      desc = "#{node._.meta} #{node.name}"
       comment_begin! desc
       node.stereotype&.each do | st |
         comment! "stereotype <<#{st.name}>>"
       end
       line! declaration
 
+      line! "  self.include ::RUML::Core::Runtime::BaseClass"
+
       if is_class
         import_method = nil # "inherited"
       else
         import_method = "included"
       end
-      if import_method
-        line! "  def self.#{import_method}(target)"
-        # trace! "\"import : \#{self}.#{import_method}(\#{target})\""
-        line! "    # super(target)"
-        line! "    self.include(target::RUML_InstanceBehavior)"
-        line! "    self.extend(target::RUML_ModuleBehavior)"
-        line! "  end"
-      end
-
       line! "  module RUML_InstanceBehavior"
       node.ownedAttribute&.each do | prop |
         emit_attribute(prop)
@@ -113,8 +116,17 @@ module RUML::Compiler
       node._.ruby_extend&.each do | m |
         line! "  self.extend #{m}"
       end
+      if import_method
+        line! "  def self.#{import_method}(target)"
+        # trace! "\"import : \#{self}.#{import_method}(\#{target})\""
+        line! "    # super(target)"
+        line! "    self.include(target::RUML_InstanceBehavior)"
+        line! "    self.extend(target::RUML_ModuleBehavior)"
+        line! "  end"
+      end
       line! "  self"
-      line! "end"
+      line! "end # #{desc}"
+      # line! "end # LKJDSLFKJSDLKFJ"
       line! ""
       comment_end! desc
     end
@@ -129,7 +141,7 @@ module RUML::Compiler
 
     def trace! expr
       # comment_begin! "TRACE"
-      line! "$stderr.puts('##RUML TRACE : ' + (#{expr}).to_s)"
+      line! "$stderr.puts(\"##RUML TRACE : \#{__FILE__}:\#{__LINE__} : \" + (#{expr}).to_s)"
       # comment_end! "TRACE"
     end
 
@@ -161,9 +173,9 @@ module RUML::Compiler
         find_node_scoped(parent, gen)
       end
 
-      desc = "Generalization"
-      comment_begin! desc
-      line!
+      desc = "Generalization : #{node_path}"
+      # comment_begin! desc
+      # line!
 
       if false
         comment! "Instantiable #######################"
@@ -171,37 +183,36 @@ module RUML::Compiler
         line!
       end
 
-      comment! "Superclass #######################"
       node._.superClass_remaining&.each do | gen |
         gen_path = navigator.path_str(find_node_scoped(parent, gen))
-        comment! "superClass #{node_path} -> #{gen_path}"
+        comment! "#{desc} : superClass #{node_path} -> #{gen_path}"
         emit_gen(node_path, :include, gen)
         line!
       end
 
-      comment! "Generals #######################"
       generals.each do | gen |
+        gen_path = navigator.path_str(gen)
+        comment! "#{desc} : #{node_path} -> #{gen_path}"
         emit_gen(node_path, :include, gen)
         line!
       end
-      comment_end! desc
+      # comment_end! desc
     end
 
     def emit_gen(node_path, op, gen)
       gen_path = navigator.path_str(gen)
-      subpath = nil
-      comment! "Generalization #{node_path} -> #{gen_path}"
-      if gen._.native
-        if gen._.kind == "module"
-          line! "#{node_path}.include(#{gen_path}"
+      native_mod = navigator.native_module(gen)
+      if native_mod
+        if ::Module === native_mods && op == :include
+          subpath = nil
         else
-          comment! ": skipping #{gen_path}"
+          comment! ": skipping #{op} #{gen_path}"
           gen_path = nil
         end
       else
         subpath = op == :include ? "::RUML_InstanceBehavior" : "::RUML_ModuleBehavior"
       end
-      line! "#{node_path}.#{op}(#{gen_path}#{subpath})" if gen_path
+      line! "  #{node_path}.#{op}(#{gen_path}#{subpath})" if gen_path
     end
 
     def emit_operation(node)
@@ -267,8 +278,12 @@ RUBY
       node_path = namespace_str(node.class)
       node_type = node.type
       node_type = node_type[0] if ::Array === node_type # !!!
-      type_name = namespace_str(node_type)
-      primitive = isPrimitiveType?(node_type)
+      binding.pry unless find_node_scoped(node.class, node_type)
+      node_type = find_node_scoped(node.class, node_type)
+      type_name = navigator.native_path_or(node_type)
+      primitive = navigator.isPrimitiveType?(node_type)
+      enumeration = navigator.hasStereotype?(node_type, :enumeration)
+
       # binding.pry if primitive
       opts = {primitive: primitive}.merge(opts)
       primitive = opts[:primitive]
@@ -284,7 +299,9 @@ RUBY
       comment_begin! desc
       # binding.pry if opts[:primitive]
 
-      if primitive
+      typecheck_msg = "expected #{type} : given \#{__val.class}"
+
+      if primitive || enumeration
         coerce = lambda { | _msg |
           <<"RUBY"
 __val = #{type}.__ruml_coerce__(__val) unless __val.nil?
@@ -295,7 +312,7 @@ RUBY
         coerce = LAMBDA_NIL
         typecheck = lambda { | msg |
           <<"RUBY"
-raise ::ArgumentError, "#{msg} : #{desc} : expected #{type}" unless __val.nil? || #{type} === __val
+raise ::ArgumentError, "#{msg} : #{desc} : #{typecheck_msg}" unless __val.nil? || #{type} === __val
 RUBY
         }
       end
@@ -447,18 +464,19 @@ RUBY
     end
 
     def emit_association node
-      e = node
-      o = e.opposite or raise
+      e = node.opposite or raise
+      o = node or raise
       # binding.pry
       upper = o.upper
       upper = :* if upper < 0
       e_type = namespace_str(e.type)
-      o_type = namespace_str(e.type)
+      o_type = namespace_str(o.type)
       desc_short = "#{e_type}::#{o.name}"
-      desc = "Association : #{desc_short} : #{o_type} #{o.lower}..#{upper}"
+      desc = "Association : #{desc_short} : #{e_type} #{o.lower}..#{upper}"
       o_name = fix_name(o.name)
       e_name = fix_name(e.name)
-      args = [desc_short, o_name, o_type, o.lower, upper, o.subsets, e_name, e_type ]
+      subsets = o.subsets.map{|s| s.to_s.sub(/^.+::/, '').to_sym} # !!! remove namespace
+      args = [desc_short, o_name, o_type, o.lower, upper, subsets, e_name, e_type ]
       comment_begin! desc
       if upper == 1
         emit_association_1(*args)
@@ -469,6 +487,7 @@ RUBY
     end
 
     def emit_association_1 desc, name, type, lower, upper, subsets, ename, etype
+      typecheck_msg = "expected #{type} : given \#{__val.class}"
       self << <<"RUBY"
   def #{name}
     @#{name}
@@ -480,7 +499,7 @@ RUBY
     @#{name}.nil? ? [ ] : [ @#{name} ]
   end
   def #{name}= __val
-    raise ArgumentError, "#{desc} : #{name}= : expected #{type}" unless __val.nil? || #{type} === __val
+    raise ArgumentError, "#{name}= : #{desc} : #{typecheck_msg}" unless __val.nil? || #{type} === __val
     #{name}_clear!
     #{name}_add!(__val)
   end
@@ -490,7 +509,7 @@ RUBY
   def #{name}_add!(__val)
     return self if __val.nil?
     unless __val == @#{name}
-      raise ArgumentError, "#{desc} : #{name}_add!: already set" unless @#{name}.nil?
+      raise ArgumentError, "#{name}_add! : #{desc} : already set" unless @#{name}.nil?
       @#{name} = __val
       #{generate_subsets(subsets, "_add!")}
       __val.#{ename}_add!(self)
@@ -500,7 +519,7 @@ RUBY
   def #{name}_remove!(__val)
     return self if __val.nil?
     if __val == @#{name}
-      raise ArgumentError, "#{desc} : #{name}_remove!: expected #{type}" unless #{type} === __val
+      raise ArgumentError, "#{name}_remove! : #{desc} :  #{typecheck_msg}" unless #{type} === __val
       @#{name} = nil
       #{generate_subsets(subsets, "_remove!")}
       __val.#{ename}_remove!(self)
@@ -511,6 +530,7 @@ RUBY
     end
 
     def emit_association_N desc, name, type, lower, upper, subsets, ename, etype
+      typecheck_msg = "expected #{type} : given \#{__val.class}"
       self << <<"RUBY"
   def #{name}
     @#{name} ||= [ ]
@@ -530,7 +550,7 @@ RUBY
   end
   def #{name}_add! __val
     return self if __val.nil?
-    raise ArgumentError, "#{desc} : #{name}_add!: expected #{type}" unless #{type} === __val
+    raise ArgumentError, "#{name}_add! : #{desc} : #{typecheck_msg}" unless #{type} === __val
     __cur = #{name}
     unless __cur.include?(__val)
       __cur.push(__val)
@@ -540,8 +560,8 @@ RUBY
     self
   end
   def #{name}_remove! __val
-    return self if _val.nil?
-    raise ArgumentError, "#{desc} : #{name}_remove!: expected #{type}" unless #{type} === __val
+    return self if __val.nil?
+    raise ArgumentError, "#{name}_remove! : #{desc} : #{typecheck_msg}" unless #{type} === __val
     __cur = #{name}
     if __cur.include?(__val)
       __cur.delete(__val)
@@ -555,7 +575,7 @@ RUBY
 
     def generate_subsets subsets, suffix
       subsets.map do |subset|
-        "##RUML subsets #{subset}\n#{subset}#{suffix}(__val)\n"
+        "##RUML subsets #{subset}\n      #{subset}#{suffix}(__val)"
       end * "\n      "
     end
 
@@ -599,47 +619,22 @@ RUBY
 
     LAMBDA_NIL = proc { nil } unless defined? LAMBDA_NIL
 
-    def isClass? node
-      node._.meta == :Class
-    end
-
-    def isPrimitiveType? type
-      result = false
-      native = native_type(type)
-      result ||= native && native.ancestors.include?(RUML::Core::PrimitiveType)
-      result ||= hasStereotype?(type, :primitive)
-      # result ||= namespace_str(type_name) =~ /\ARUML::Core::PrimitiveTypes::/
-      result
-    end
-
-    def hasStereotype? node, name
-      name = name.to_s
-      binding.pry if node.stereotype && node.stereotype.size > 0
-      node.stereotype&.find{|x| x.name == name}
-    end
-
-    def native_type type
-      type.__ruml_obj__ if RUML::Compiler::Native::RNamespace === type
-    end
-
     def find_node_scoped(node, name)
       return name unless ::String === name
       navigator.find_node_scoped(node, name)
     end
 
     def namespace_str(node)
-      navigator.namespace_str(node)
+      navigator.path_str(node)
     end
 
-    def fix_name name
-      KEYWORDS.include?(name) ? "#{name}_" : name
+    def keywords
+      @keywords ||= %w[
+        if then else end begin
+        case when
+        try catch raise
+        class module
+      ].freeze
     end
-
-    KEYWORDS = %w[
-      if then else end begin
-      case when
-      try catch raise
-      class module
-    ].freeze
   end
 end # module

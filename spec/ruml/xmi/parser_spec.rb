@@ -2,36 +2,25 @@
 
 require 'tempfile'
 require 'ruml/xmi/parser'
+require 'ruml/boot/model'
+require 'ruml/core/factory'
 
 describe RUML::XMI::Parser do
   subject do
-    described_class.new.tap{|o| o.logger.close }
+    described_class.new(factory: factory).tap{|o| o.logger.close }
   end
+  let(:factory) { RUML::Core::Factory.new(root: factory_root) }
+  let(:factory_root) { RUML::Boot::Model }
+  let(:url) { "vendor/www.omg.org/spec/UML/20161101/UML.xmi" }
+
   it 'resolves repeated references to the same object without duplicating associations' do
-    xml = <<~XML
-      <xmi:XMI xmlns:xmi="http://www.omg.org/spec/XMI/20131001">
-        <model xmi:type="uml:Model" xmi:id="model">
-          <ownedMember xmi:type="uml:Class" xmi:id="class">
-            <ownedAttribute xmi:type="uml:Property" xmi:id="property"/>
-            <ownedAttribute xmi:idref="property"/>
-            <ownedAttribute xmi:type="uml:Property" xmi:id="other"/>
-          </ownedMember>
-        </model>
-      </xmi:XMI>
-    XML
+    root = subject.call(url)
+    binding.pry
+    model = root.model.first
+    klass = model.ownedMember.first
+    attributes = klass.ownedAttribute
 
-    Tempfile.create(['association', '.xmi']) do |file|
-      file.write(xml)
-      file.flush
-
-      root = subject.call(file.to_path)
-      # binding.pry
-      model = root.model.first
-      klass = model.ownedMember.first
-      attributes = klass.ownedAttribute
-
-      expect(attributes.map { |attribute| attribute._.id }).to eq(%w[property other])
-    end
+    expect(attributes.map { |attribute| attribute._.id }).to eq(%w[property other])
   end
 
   describe "compiled" do

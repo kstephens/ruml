@@ -25,6 +25,7 @@ describe RUML::Core::Notation do
          :type=>"String",
          :default=>nil,
          :isDerived=>false,
+         :aggregation => :none,
          :subsets=>[],
          :redefines=>[],
          :isOrdered=>false,
@@ -87,11 +88,22 @@ describe RUML::Core::Notation do
     end
   end
 
+  describe "#modifiers" do
+    let(:modifiers) { subject.modifiers "subset a, #subset b, foo, subset PKG::bar" }
+    it "parses uncommented items" do
+      expect(modifiers).to eq(["subset a", "foo", "subset PKG::bar"])
+    end
+    it "strips package names" do
+      binding.pry
+      expect(subject.subsets(modifiers)).to eq(["a", "bar"])
+    end
+  end
+
   describe "#operation" do
     it "parses no parameters and no return type" do
       obj = subject.operation "+ name()"
       props = obj.to_h.dup
-      params = props.delete(:parameters)
+      params = props.delete(:parameter)
       expect(props).to eq(
         {:isDerived=>false, :name=>"name", :visibility=>:public}
       )
@@ -105,8 +117,7 @@ describe RUML::Core::Notation do
       $stop_here = true
       obj = subject.operation "+ name() : String [0..1]"
       props = obj.to_h.dup
-      params = props.delete(:parameters)
-      # binding.pry
+      params = props.delete(:parameter)
       expect(props).to eq(
         {:isDerived=>false, :name=>"name", :visibility=>:public}
       )
@@ -120,8 +131,7 @@ describe RUML::Core::Notation do
     it "parses without a return type" do
       obj = subject.operation "- /name(a : Integer)"
       props = obj.to_h.dup
-      params = props.delete(:parameters)
-      pp(props: props)
+      params = props.delete(:parameter)
       expect(props).to eq(
         {:isDerived=>true, :name=>"name", :visibility=>:private}
       )

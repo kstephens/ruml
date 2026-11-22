@@ -20,7 +20,7 @@ module RUML
       Support.copy_method(self, :eql?, ::Object)
       Support.copy_method(self, :is_a?, ::Object)
 
-      ATTRS = %i[meta name args].freeze
+      ATTRS = %i[metatype name args].freeze
 
       def _desc_
         @_desc_ ||= ATTRS.map do |name|
@@ -29,7 +29,7 @@ module RUML
       end
 
       def to_s
-        "#{node._.meta} #{args.map(&:inspect).join(", ")}"
+        "#{node._.metatype} #{args.map(&:inspect).join(", ")}"
       end
 
       def node_keys

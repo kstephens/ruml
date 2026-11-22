@@ -2,9 +2,6 @@
 
 require 'ruml'
 require 'ruml/xmi'
-require 'ruml/xmi/factory'
-require 'ruml/xmi/factory2'
-require 'ruml/xmi/resolver'
 require 'ruml/support/logging'
 require 'nokogiri'
 require 'uri'
@@ -12,14 +9,13 @@ require 'faraday'
 
 module RUML
   module XMI
+    class ParserError < ::RUML::Error ; end
     class Parser
       include RUML::Support::Logging::Basic
       attr_accessor :parsers
       attr_reader :factory
       attr_reader :stats
       attr_accessor :error, :error_elems
-
-      class ParserError < ::StandardError ; end
 
       def initialize factory: nil
         logger.level = Logger::INFO
@@ -32,7 +28,7 @@ module RUML
           # "https://www.omg.org/spec/UML/20131001/PrimitiveTypes.xmi" =>
           # "https://www.omg.org/spec/UML/20161101/PrimitiveTypes.xmi",
         }
-        @factory = factory ||= Factory2.new
+        @factory = factory or raise
         @stats = Hash.new do | h, n |
           h[n] = Hash.new do | h, k |
             h[k] = 0
@@ -44,7 +40,22 @@ module RUML
         @error = nil
         @error_elems = []
         parser = ParserCore.new(self)
-        parser.call(url).root
+        begin
+          parser.call(url)
+        ensure
+          # self.logger = nil
+          if @error
+            e = @error
+            logger.error e; puts(e)
+            error_elems.each do | elem |
+              puts "in #{elem}"
+            end
+            e.backtrace do | loc |
+              puts "at #{loc}"
+            end
+          end
+        end
+        parser.root
       end
 
       def load_xml(url)
@@ -115,28 +126,31 @@ module RUML
 
       def initialize top_level
         @top_level = top_level
-        # @root = factory.get_class("xmi", "XMI").new
-        @root = factory.make_instance("xmi", "XMI", {})
+        @root = factory.new("xmi", "Root", {})
+        setup()
+      end
+
+      def setup
         @hrefs = {}
         @elem_stack = []
-        @target_stack = []
+        @obj_stack = []
         @xmi_id_to_object = {}
       end
 
       def call(xmi_url)
-        @error = nil
+        setup
         xmi_url = xmi_url.to_s
         @xmi_url = xmi_url
+        @obj_stack.push(@root)
         @dom = @top_level.load_xml(xmi_url)
-        @target_stack.push(@root)
         @phase = :build
-        parse_doc(@dom)
+        parse_top_level(@dom)
         @phase = :resolve
-        parse_doc(@dom)
+        parse_top_level(@dom)
         self
       end
 
-      def parse_doc(elem)
+      def parse_top_level(elem)
         elem.children[0].children.each do | e |
           next if e.name == "documentation"
           parse(e)
@@ -148,38 +162,28 @@ module RUML
       end
 
       def parse(elem)
+        # puts("#{@phase} : #{bare_xml_node(elem)}")
         _parse(elem)
-        # raise "WEEEE!" if @elem_stack.size > 10
-      rescue StandardError => e
+      rescue => e
         unless @top_level.error
           @top_level.error = e
           @top_level.error_elems.concat((@elem_stack + [elem]).map!{|e| bare_xml_node(e)})
         end
-        raise
+        raise e
       end
 
       def _parse(elem)
-        xmi_type, xmi_id, xmi_idref, href = parse_xmi_attrs(elem)
-        top_level.stats[:xmi_type][xmi_type] += 1
-        top_level.stats[:nil_xmi_type][elem.name] += 1 unless xmi_type
-        # pp(xmi_idref: xmi_idref, name: elem.name) unless xmi_type
-        top_level.stats[:href][href] += 1
-        top_level.stats[:name][elem.name] += 1
-        get_attr(elem, nil, nil) do | attr |
-          top_level.stats[:properties][attr.name] += 1
-        end
-        elem.children.each{|e| parse(e) }
-      end
-
-      def x_parse(elem)
         logger.debug { "### ######################################################" }
         logger.debug { "ELEM  : #{elem.name} @#{elem.object_id}" }
         logger.debug { "ATTRS : #{convert_attrs(elem).inspect}" }
+        _add_element_stats(elem) if @phase == :build
+        elem_desc = bare_xml_node(elem)
         attr = elem.name.to_sym
-        parent = @target_stack.last
+        parent = @obj_stack.last
         @elem_stack.push(elem)
         begin
           xmi_type, xmi_id, xmi_idref, href = parse_xmi_attrs(elem)
+          # puts([xmi_type, xmi_id, xmi_idref, href].map(&:inspect))
           unique_id = xmi_id || xmi_idref
           unique_id &&= "#{@xmi_url}\##{unique_id}"
           case
@@ -201,16 +205,16 @@ module RUML
             get_attr(elem, nil, nil) do | attr |
               properties[attr.name] = attr.value
             end
-            obj = factory.make_instance(xmi_type_prefix, xmi_type_name, properties, unique_id)
-            obj._.type = xmi_type
-            obj._.id = xmi_id
-            obj._.type_prefix = xmi_type_prefix
-            obj._.type_name = xmi_type_name
-            obj._.node_parent = parent
-            parent._.node_children << obj if parent
-            factory.associate(parent, :ownedElement, obj) if parent
+            obj = factory.new(xmi_type_prefix, xmi_type_name, properties, unique_id)
+            # obj._.type = xmi_type
+            # obj._.id = xmi_id
+            # obj._.type_prefix = xmi_type_prefix
+            # obj._.type_name = xmi_type_name
+            # obj._.node_parent = parent
+            # parent._.node_children << obj if parent
+            associate(parent, :ownedElement, obj, elem_desc)
             obj.owner = parent
-            factory.set_source_location(obj, @xmi_url, elem.line)
+            # factory.set_source_location(obj, @xmi_url, elem.line)
             @xmi_id_to_object[xmi_id] = obj if xmi_id
             logger.debug { "PROPERTIES : #{properties.inspect}" }
             logger.debug { "OBJECT     : #{obj.inspect}" }
@@ -218,29 +222,29 @@ module RUML
             if @phase == :build
               dom = @top_level.resolve_href(href)
               other = parse(dom)
-              factory.associate(parent, attr, other)
+              associate(parent, attr, other, elem_desc)
               logger.debug { "parent=#{parent}" }
               logger.debug { "attr=#{attr.inspect}" }
               logger.debug { "prop=#{parent.__send__(attr)}" }
               # binding.pry
             end
           when elem.attributes.empty?
-            parent.__send__(:"#{elem.name}=", elem.content)
+            parent.__send__(:"#{elem.name}_add!", elem.content)
           else
-            raise StandardError, "no xmi:type or xmi:idref"
+            raise ParserError, "no xmi:type or xmi:idref"
           end
 
           if obj
-            @target_stack.push(obj)
+            @obj_stack.push(obj)
             begin
               if @phase == :resolve && obj && parent
                 logger.debug { "  obj=#{obj}" }
                 logger.debug { "  parent=#{parent}" }
-                factory.associate(parent, attr, obj)
+                associate(parent, attr, obj, elem_desc)
               end
               parse_children(elem)
             ensure
-              @target_stack.pop
+              @obj_stack.pop
             end
           end
 
@@ -248,6 +252,24 @@ module RUML
         ensure
           @elem_stack.pop
         end
+      end
+
+      def _add_element_stats(elem)
+        xmi_type, xmi_id, xmi_idref, href = parse_xmi_attrs(elem)
+        top_level.stats[:xmi_type][xmi_type] += 1
+        top_level.stats[:nil_xmi_type][elem.name] += 1 unless xmi_type
+        # pp(xmi_idref: xmi_idref, name: elem.name) unless xmi_type
+        top_level.stats[:href][href] += 1
+        top_level.stats[:name][elem.name] += 1
+        get_attr(elem, nil, nil) do | attr |
+          top_level.stats[:properties][attr.name] += 1
+        end
+      end
+
+      def associate dst, attr, obj, elem
+        # puts("associate(#{dst}, #{attr.inspect}, #{elem.inspect}")
+        factory.associate(dst, attr, obj, elem) if dst
+        dst
       end
 
       def parse_xmi_attrs(elem)

@@ -22,6 +22,15 @@ module RUML
         @navigator ||= ::RUML::Core::Navigation::Navigator.new
       end
 
+      def fix_name name
+        name =name.to_s
+        keywords.include?(name) ? "#{name}_" : name
+      end
+
+      def keywords
+        raise
+      end
+
       def out
         @out ||= StringIO.new
       end
@@ -88,6 +97,11 @@ module RUML
 
       def to_s
         out.string
+      end
+
+      def find_node_scoped node, path
+        return path unless String === path
+        navigator.find_node_scoped(node, path)
       end
 
       def inspect

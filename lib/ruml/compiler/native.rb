@@ -59,12 +59,15 @@ module RUML::Compiler
           # __initialize__
         end
 
-        def ownedElement ; @ownedElement ||= [].freeze ; end
+        def ownedElement ; @ownedElement ||= [] ; end
         alias_method :ownedElement=, :__fail__
         def __initialize__ ; end
       end
 
       class RNamespace < RElement
+        def to_s
+          @__ruml_obj__.to_s
+        end
         def __initialize__
           super()
           mod = @__ruml_obj__
@@ -77,7 +80,7 @@ module RUML::Compiler
           self.name = name
           _.to_h.update(
             native: @__ruml_obj__,
-            meta: :Namespace,
+            metatype: :Namespace,
             blk: nil,
             path: [full_path],
             path_str: full_path,
@@ -106,14 +109,14 @@ module RUML::Compiler
         alias_method :namespace, :owner
 
         def ownedElement
-          @ownedElement ||= @__ruml_obj__
+          @__ruml_obj__
             .constants.map{|n| @__ruml_obj__.const_get(n)}
             .select{|v| ::Module === v}
             .map{|obj|
               node = @__ruml_native__[obj]
               node.owner = self
               node
-            }.freeze.tap{|x| self[:ownedElement] = x}
+            }.tap{|x| self[:ownedElement] = x}
         end
       end
 
@@ -122,7 +125,7 @@ module RUML::Compiler
 
         def __initialize__
           super()
-          _.meta = :Class
+          _.metatype = :Class
           self.superClass = []
         end
 
@@ -133,7 +136,7 @@ module RUML::Compiler
               node = @__ruml_native__[m]
               node.owner = self
               node
-            end.freeze.tap{|x| self[:ownedOperation] = x}
+            end.tap{|x| self[:ownedOperation] = x}
         end
         alias_method :ownedOperation=, :__fail__
       end
@@ -156,7 +159,7 @@ module RUML::Compiler
               node.owner = self
               node
             end
-          end.sort_by(&:name).freeze
+          end.sort_by(&:name)
         end
       end
 

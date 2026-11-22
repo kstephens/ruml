@@ -21,4 +21,5 @@ group :development do
   gem "rake", "~> 13.4"
   gem "rspec", "~> 3.13"
   gem "rubocop", "~> 1.92"
+  gem "simplecov", "~> 0.22"
 end

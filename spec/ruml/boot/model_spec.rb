@@ -6,7 +6,7 @@ require 'ruml/core/factory'
 
 describe RUML::Boot::Model do
   let(:model) { RUML::Boot::Model }
-  let(:factory) { RUML::Core::Factory.new(model)}
+  let(:factory) { RUML::Core::Factory.new(root: model)}
   let(:n1) { factory.new(:UML, :Namespace, name: "N1") }
   let(:c1) { factory.new(:UML, :Class, name: "C1") }
 

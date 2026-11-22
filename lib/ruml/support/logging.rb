@@ -6,10 +6,14 @@ module RUML
   module Support
     module Logging
       module Basic
-        attr_accessor :logger, :log_verbose, :log_prefix
+        attr_accessor :logger, :log_verbose, :log_prefix, :log_stream
+
+        def log_stream
+          @log_stream ||= File.open("/dev/tty", "w+")
+        end
 
         def logger
-          @logger ||= Logger.new($stderr).tap do | logger |
+          @logger ||= Logger.new(log_stream).tap do | logger |
             logger.formatter = lambda do |severity, datetime, progname, msg|
               # #{datetime.strftime('%Y-%m-%d%H:%M:%S')}
               "  ### #{self.class} #{severity} #{msg}\n"

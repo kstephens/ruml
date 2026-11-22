@@ -7,6 +7,7 @@ require 'ruml/support/logging'
 require 'ruml/support/misc'
 require 'ruml/compiler/ast'
 require 'ruml/compiler/target/ruby'
+require 'ruml/compiler/native'
 require 'ruml/core/navigation'
 
 module RUML
@@ -18,14 +19,18 @@ module RUML
     include RUML::Support::Logging::Basic
     EMPTY_ARRAY = [ ].freeze unless defined? EMPTY_ARRAY
 
-    attr_reader :root_namespace, :pass
-    attr_accessor :target, :target
+    attr_reader :root, :pass
+    attr_accessor :target, :target, :file, :code
 
     def initialize opts = nil, &blk
       opts ||= { } # EMPTY_HASH
       @opts = opts
+      @code = nil
       @created_modules = [ ]
-      @root_namespace = opts[:root_namespace]
+      @navigator = RUML::Core::Navigation::Navigator.new
+      @native = RUML::Compiler::Native.new
+      @file = @opts[:file]
+      @root = opts.fetch(:root)
       @target = opts.fetch(:target)
       @target = RUML::Compiler::Target.const_get(@target) if ::Symbol === @target
       @target = @target.new unless RUML::Compiler::Target === @target
@@ -41,26 +46,43 @@ module RUML
         compile(node)
       end
       @target.emit_postamble(node)
+      @code = @target.to_s
+      save_code()
+    end
+
+    def save_code()
+      root_name = @root
+      root_name = @root.to_s if Module === root_name
+      # root_name = @navigator.namespace_str(@native[@root]) unless String === root_name
+      root_file_name = root_name.gsub(/::/, '-').downcase
+      root_file_name = "tmp/#{root_file_name}.rb"
+      # binding.pry
+      @file ||= root_file_name
+      if @file
+        RUML::Support::Misc.write_readonly_file(@file, code)
+        $stderr.puts("#{self.class} : wrote #{@file}")
+      end
       self
     end
 
     def eval_code()
-      code = @target.to_s
-      file = "tmp/eval_code.rb"
-      RUML::Support::Misc.write_readonly_file(file, code)
-      $stderr.puts("wrote #{file}")
-      load(file)
-      # ::Kernel.eval(code)
+      if @file
+        $stderr.puts("#{self.class} : loading #{@file}")
+        load(file)
+      else
+        ::Kernel.eval(code)
+      end
       self
     end
 
     def compile node
-      meta = node._.meta
-      sels = [ :"compile_#{meta}_#{pass}", :"compile_#{meta}" ]
-      # sels = [ :"compile_#{meta}_#{pass}" ]
+      metatype = node._.metatype
+      sels = [ :"compile_#{metatype}_#{pass}", :"compile_#{metatype}" ]
+      # sels = [ :"compile_#{metatype}_#{pass}" ]
       sels.each do | sel |
         if respond_to?(sel)
-          log { "#{sel.inspect} : #{node._}" }
+          # @target.trace! "'compile : #{sel} : #{node.inspect}}'"
+          log { "#{sel.inspect} : #{node.inspect}" }
           return send(sel, node)
         end
       end
@@ -74,8 +96,6 @@ module RUML
       node.ownedElement.each {|x| compile(x) }
       @pass = 2
       node.ownedElement.each {|x| compile(x) }
-      # @pass = 3
-      # node.ownedElement.each {|x| compile(x) }
     end
 
     def compile_Class node

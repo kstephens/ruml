@@ -8,7 +8,11 @@ module Runtime
   class Error < StandardError ; end
   class UninstantiatableError < Error ; end
 
+  module BaseClass
+  end
+
   module Uninstantiatable
+    include BaseClass
     def self.included base
       base.extend(ModuleMethods)
       base.include(InstanceMethods)
@@ -23,6 +27,7 @@ module Runtime
   end
 
   module Instantiable
+    include BaseClass
     def self.included base
       base.extend(ModuleMethods)
       base.include(InstanceMethods)

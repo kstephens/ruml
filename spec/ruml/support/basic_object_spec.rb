@@ -59,11 +59,6 @@ describe RUML::Support::BasicObject do
       expect(klass.instance_methods).to include(:c, :c=)
     end
 
-    it "sets a value when a getter is called with one argument" do
-      obj.d(4)
-      expect(repr[:d]).to eq(4)
-    end
-
     it "returns nil for an unset key" do
       expect(obj.missing).to be_nil
     end

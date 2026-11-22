@@ -30,8 +30,8 @@ module RUML::Core
           isReadOnly: pms.include?("readOnly"),
           isDerivedUnion: !! pms.include?("union"),
           isID: pms.include?("id"),
-          subsets: modifier_values(pms, 'subsets'), # !!! use actual models
-          redefines: modifier_values(pms, 'redefines'), # !!! use actual models
+          subsets: subsets(pms),
+          redefines: redefines(pms),
         }
         if pms.include?("seq") || pms.include?("sequence")
           prop.update(
@@ -94,10 +94,19 @@ module RUML::Core
       VISIBILITY_NAME.fetch(s || '+')
     end
 
+    def subsets pms
+      modifier_values(pms, 'subsets')
+    end
+
+    def redefines pms
+      modifier_values(pms, 'redefines')
+    end
+
     def modifiers s
       (s || '').strip.split(/\s*,\s*/).map! do |pm|
-        pm.split(/\s+/).join(' ')
-      end
+        pm.strip!
+        pm.split(/\s+/).join(' ') unless pm[0] == "#"
+      end.compact
     end
 
     def modifier_values pms, key
@@ -125,21 +134,21 @@ module RUML::Core
       end
     end
 
-    def _parse rx, str, ns, name
+    def _parse rx, str, ns, type
       str = str.gsub(/\s/, ' ')
       str = str.strip
       return unless (match = _match(rx, str))
       properties = (yield match) || match
-      obj = _new(ns, name, properties)
-      obj._.metatype = name.to_sym
+      obj = _new(ns, type, properties)
+      obj._.metatype = type.to_sym
       obj._.properties = properties
       obj._.match = match
       obj._.notation = str
       obj
     end
 
-    def _new ns, name, properties
-      @factory.new(ns, name, properties)
+    def _new ns, type, properties
+      @factory.new(ns, type, properties)
     end
 
     def _match rx, s

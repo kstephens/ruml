@@ -5,9 +5,9 @@ require 'ruml/support'
 module RUML::Support::Misc
   extend self
 
-  def lookup_const name, root = ::Object
-    return nil if name.nil? || name == ""
-    name.split("::", -1).reject(&:empty?).inject(root) do | mod, name |
+  def lookup_const path, root = ::Object
+    return nil if path.nil? || path == ""
+    path_str_split(path).inject(root) do | mod, name |
       return nil unless ::Module === mod
       begin
         mod.const_get(name, false)
@@ -31,17 +31,39 @@ module RUML::Support::Misc
     path.sub(/\A.*::/, '')
   end
 
-  def or_die(val, msg=nil)
+  def or_die(val, *args)
     if val.nil?
-      msg ||= yield if block_given?
-      msg ||= caller(1)
+      errors, msgs = args.partition{|x| ::StandardError === x}
+      error = errors.first || ::ArgumentError
+      msg = msgs.first
+      msg = (msg || "").dup
+      msg_yield = yield if block_given?
+      msg << " : " << msg_yield if msg_yield
       raise ::ArgumentError, "#{msg}"
     end
     val
   end
 
+  def path_str_split name
+    return [] if name.nil? || name == ""
+    return name if Array === name
+    name.to_s.split("::", -1).reject(&:empty?)
+  end
+
+  def dynamic_nesting mod
+    result = []
+    return result unless mod
+    path = mod.to_s
+    while path
+      mod = lookup_const(path)
+      result << mod
+      path = path_str_parent(path)
+    end
+    result
+  end
+
   def write_readonly_file name, content=nil
-    File.chmod(0644, name)
+    File.chmod(0644, name) rescue Errno::ENOENT
     File.open(name, "w+") do | io |
       io.write(content) unless content.nil?
       yield io if block_given?
