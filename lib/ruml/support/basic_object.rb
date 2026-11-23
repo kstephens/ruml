@@ -11,6 +11,8 @@ module RUML
         ::RUML::Support.copy_method(self, :__caller_locations__, ::Kernel, :caller_locations)
         ::RUML::Support.copy_method(self, :__raise__, ::Kernel, :raise)
         ::RUML::Support.copy_method(self, :__respond_to?, ::Object, :respond_to?)
+        ::RUML::Support.copy_method(self, :__method__, ::Object, :method)
+        ::RUML::Support.copy_method(self, :__methods__, ::Object, :methods)
         # ::RUML::Support.copy_method(self, :__eq__, ::Object, :==)
         ::RUML::Support.copy_method(self, :__hash_, ::Object, :hash)
 
@@ -83,7 +85,7 @@ module RUML
         def to_h ; @_repr ; end
         def inspect detail=false
           return super() if detail
-          "<#{__class__}:#{__object_id__} #{_desc_}>"
+          "<#{__class__}:#{__id__} #{_desc_}>"
         end
         def _desc_
           ""

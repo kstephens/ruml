@@ -94,7 +94,6 @@ describe RUML::Core::Notation do
       expect(modifiers).to eq(["subset a", "foo", "subset PKG::bar"])
     end
     it "strips package names" do
-      binding.pry
       expect(subject.subsets(modifiers)).to eq(["a", "bar"])
     end
   end

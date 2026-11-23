@@ -4,6 +4,7 @@ require 'tempfile'
 require 'ruml/xmi/parser'
 require 'ruml/boot/model'
 require 'ruml/core/factory'
+require 'ruml/core/formatter'
 
 describe RUML::XMI::Parser do
   subject do
@@ -15,16 +16,14 @@ describe RUML::XMI::Parser do
 
   it 'resolves repeated references to the same object without duplicating associations' do
     root = subject.call(url)
-    binding.pry
-    model = root.model.first
-    klass = model.ownedMember.first
-    attributes = klass.ownedAttribute
-
+    model = root.ownedElement.first
+    RUML::Core::Formatter.new.call(model)
+    attributes = pkg.ownedAttribute
     expect(attributes.map { |attribute| attribute._.id }).to eq(%w[property other])
   end
 
   describe "compiled" do
-    let(:url) { "vendor/www.omg.org/spec/MOF/20131001/MOF.xmi" }
+    # let(:url) { "vendor/www.omg.org/spec/MOF/20131001/MOF.xmi" }
     it "parses and compiles" do
       root = subject.call(url)
     end

@@ -12,7 +12,7 @@ module RUML
     class Target
       include Support::Initialize, Support::Logging::Basic
 
-      attr_accessor :frontend, :trace, :depth
+      attr_accessor :frontend, :trace, :depth, :root_node, :root_node_path
 
       def context
         @context ||= ::RUML::Support.Contexts.new

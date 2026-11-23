@@ -14,32 +14,36 @@ module RUML::Core
       @instance_by_id = {}
     end
 
-    def new ns, name, props, id = nil
+    def new ns, type, props, id = nil
       if id && (instance = @instance_by_id[id])
         return instance
       end
-      # puts("new(#{ns.inspect}, #{name.inspect}) => ...")
-      instance = class_module(ns, name).new(props)
-      # puts("new(#{ns.inspect}, #{name.inspect}) => #{instance.inspect}")
+      # puts("new(#{ns.inspect}, #{type.inspect}) => ...")
+      instance = class_module(ns, type).new(props)
+      # puts("new(#{ns.inspect}, #{type.inspect}) => #{instance.inspect}")
       # binding.pry
       @instance_by_id[id] = instance if id
       instance
+    rescue => e
+      reraise e, "new(#{ns.inspect}, #{type.inspect}, #{props.inspect}, #{id.inspect}}"
     end
 
-    def class_module ns, name
-      ns = ns.to_sym
-      name = name.to_s
-      @class_module[[ns, name]] ||= lookup_const(root_module(ns), name)
+    def class_module ns, type
+      return type if ::Class === type
+      @class_module[[ns, type]] ||= _class_module(ns, type)
+    end
+
+    def _class_module ns, type
+      lookup_const(root_module(ns), type.to_s)
     end
 
     def root_module ns
-      name = ns.to_s.upcase.to_sym
-      @root_module[ns] ||= @root.const_get(name)
+      @root_module[ns] ||= @root.const_get(ns.to_s.upcase.to_sym, false)
     end
 
     def lookup_const base, name
-      path = RUML::Core::Navigation.split_path(name)
-      puts([base, path].inspect)
+      path = RUML::Core::Navigation.split_path(name.to_s)
+      # puts([base, path].inspect)
       RUML::Support::Misc.lookup_const(path, base)
     end
 
@@ -47,7 +51,11 @@ module RUML::Core
       sel = :"#{attr}_add!"
       dst.send(sel, obj)
     rescue => e
-      raise RUML::FactoryError, "associate(#{dst.class}, #{attr.inspect}, #{obj.class}) : #{e} : #{msg} "
+      reraise e, "associate(#{dst.class}, #{attr.inspect}, #{obj.class}) : #{msg || "..."}"
+    end
+
+    def reraise e, msg
+      raise RUML::FactoryError, "#{e.inspect} : #{msg}", e.backtrace
     end
   end
 end

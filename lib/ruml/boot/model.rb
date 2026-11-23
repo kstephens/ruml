@@ -238,8 +238,10 @@ redefinableElement}",
         "+ redefinedProperty : Property * {subsets redefinedElement}"
     end
 
+    # 11.5 Associations
     class_ :Association do
-      generalization :Relationship, :Classifier
+      superClass :Classifier
+      generalization :Relationship
       property "+ isDerived : Boolean = false"
       association \
         "+owningAssociator : Association 0..1 {composite, subsets featuringClassifier, subsets namespace, subsets association, subsets redefinitionContext}",
@@ -372,7 +374,6 @@ redefinableElement}",
     end
   end
 
-  # binding.pry
   package :MOFEXT do
     import "MOF::Extension"
   end

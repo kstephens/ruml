@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "zlib"
+require "set"
 module RUML::Core
 module Runtime
   N = 1000000000000000 unless defined? N
@@ -8,18 +10,53 @@ module Runtime
   class Error < StandardError ; end
   class UninstantiatableError < Error ; end
 
+
+  # Metadata hook for Ruby Module
+  class Meta
+    attr_reader :native, :native_file, :native_line
+    attr_accessor :native_data
+
+    def initialize ruby_module
+      @native = ruby_module
+      @native_data = {}
+    end
+    def loading(file, line)
+      @native_file, @native_line = file, line
+      puts("##RUML loading #{native_file}:#{native_line} : #{@native}")
+    end
+    def inspect full=false
+      return super() if full
+      "#<#{self.class} #{@native} #{@native_file}>"
+    end
+  end
+
   module BaseClass
+    def self.included(target)
+      super(target)
+      target.extend(RUML_BaseClass_ModuleMethods)
+    end
+
+    def __ruml_initialize__ _opts = nil
+      self
+    end
+
+    module RUML_BaseClass_ModuleMethods
+      def ruml
+        @__ruml__ ||= Meta.new(self)
+      end
+    end
   end
 
   module Uninstantiatable
     include BaseClass
-    def self.included base
-      base.extend(ModuleMethods)
-      base.include(InstanceMethods)
+    def self.included target
+      super(target)
+      target.extend(RUML_Uninstantiatable_ModuleMethods)
+      target.include(RUML_Uninstantiatable_InstanceMethods)
     end
-    module ModuleMethods
+    module RUML_Uninstantiatable_ModuleMethods
     end
-    module InstanceMethods
+    module RUML_Uninstantiatable_InstanceMethods
       def initialize *_args
         raise UninstantiatableError, "#{self.class}"
       end
@@ -28,18 +65,19 @@ module Runtime
 
   module Instantiable
     include BaseClass
-    def self.included base
-      base.extend(ModuleMethods)
-      base.include(InstanceMethods)
+    def self.included target
+      super(target)
+      target.extend(RUML_Instantiable_ModuleMethods)
+      target.include(RUML_Instantiable_InstanceMethods)
     end
 
-    module ModuleMethods
+    module RUML_Instantiable_ModuleMethods
     end
 
-    module InstanceMethods
+    module RUML_Instantiable_InstanceMethods
       def __ruml_initialize__ opts = nil, &blk
-        opts ||= EMPTY_Hash
-        opts.each do | k, v |
+        super(opts)
+        opts&.each do | k, v |
           s = :"#{k}="
           if respond_to? s
             send(s, v)
@@ -47,18 +85,21 @@ module Runtime
             instance_variable_set("@#{k}", v)
           end
         end
-        if block_given?
-          instance_eval(&blk)
-        end
+        instance_eval(&blk) if blk
         self
       end
       alias :initialize :__ruml_initialize__
     end
   end
+
     module Import
-      def self.import dst, src
-        src.constants do | name |
-          dst.const_set(name, src.const_get())
+      def self.importable_names package
+        package.constants.reject{|name| name.to_s =~ /\ARUML_/}
+      end
+
+      def self.import_package namespace, package
+        importable_names(package).each do | name |
+          namespace.const_set(name, package.const_get(name))
         end
       end
     end
@@ -66,7 +107,7 @@ module Runtime
     module Enumeration
       def self.included(target)
         super(target)
-        target.extend(ClassMethods)
+        target.extend(RUML_Enumeration_ClassMethods)
       end
       attr_reader :name
 
@@ -89,7 +130,7 @@ module Runtime
         end
       end
 
-      module ClassMethods
+      module RUML_Enumeration_ClassMethods
         def __ruml_coerce__ x
           case x
           when self               then x

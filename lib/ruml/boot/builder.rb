@@ -29,9 +29,6 @@ module RUML
 
     include Support::Logging
     attr_reader :created, :root, :root_node, :contexts, :navigator
-    include Support::BasicObject::Repr, Support::Logging
-
-    def _repr ; @contexts.node ; end
 
     def initialize opts = nil, &blk
       @opts = opts || {}
@@ -49,7 +46,7 @@ module RUML
       @module_proxy = {}
       @native_root = @native[@opts.fetch(:root)]
       @root_node = _build(:RUML, :Root, {}) do | node |
-        node.owner = native_root
+        node.owner = @native_root
         node.ownedElement ||= UniqueArray.new
         node.importedPackage ||= UniqueArray.new
       end
@@ -319,7 +316,7 @@ module RUML
       import = _build(:UML, :PackageImport, {visibility: :public})
       package = _find_node_scoped(namespace, package)
       import.importedPackage = package
-      import.importingNamespace = package
+      import.importingNamespace = namespace
       namespace.packageImport << import
     end
 
@@ -353,7 +350,7 @@ module RUML
       node.namespace = namespace
       node.namespace.ownedElement << node if node.namespace
       node.owner = node.namespace
-      node.stereotype = UniqueArray.new
+      node.stereotype ||= UniqueArray.new
       node.packageImport = UniqueArray.new
       _with(node, :Namespace, &blk)
     end

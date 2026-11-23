@@ -1,8 +1,8 @@
 
 # frozen_string_literal: true
 
-module RUML
-  module Compiler
-    class CompilerError < StandardError; end
-  end
+require 'ruml'
+
+module RUML::Compiler
+  class CompilerError < RUML::Error; end
 end

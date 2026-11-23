@@ -19,7 +19,7 @@ module RUML
     include RUML::Support::Logging::Basic
     EMPTY_ARRAY = [ ].freeze unless defined? EMPTY_ARRAY
 
-    attr_reader :root, :pass
+    attr_reader :root, :pass, :root_node
     attr_accessor :target, :target, :file, :code
 
     def initialize opts = nil, &blk
@@ -29,18 +29,18 @@ module RUML
       @created_modules = [ ]
       @navigator = RUML::Core::Navigation::Navigator.new
       @native = RUML::Compiler::Native.new
-      @file = @opts[:file]
       @root = opts.fetch(:root)
       @target = opts.fetch(:target)
       @target = RUML::Compiler::Target.const_get(@target) if ::Symbol === @target
       @target = @target.new unless RUML::Compiler::Target === @target
       @target.frontend = self
-      @current = nil
-      @current_stack = [ ]
+      @file = @opts[:file] || @target.default_code_file(@root.to_s)
       @pass = 1
     end
 
     def run node
+      @target.root_node = node
+      @target.root_node_path = @navigator.path_str(node)
       @target.emit_preamble(node)
       @target.emit_root(node) do
         compile(node)
@@ -51,13 +51,6 @@ module RUML
     end
 
     def save_code()
-      root_name = @root
-      root_name = @root.to_s if Module === root_name
-      # root_name = @navigator.namespace_str(@native[@root]) unless String === root_name
-      root_file_name = root_name.gsub(/::/, '-').downcase
-      root_file_name = "tmp/#{root_file_name}.rb"
-      # binding.pry
-      @file ||= root_file_name
       if @file
         RUML::Support::Misc.write_readonly_file(@file, code)
         $stderr.puts("#{self.class} : wrote #{@file}")
@@ -108,6 +101,7 @@ module RUML
     end
 
     def compile_Namespace_1 node
+      node.importedPackage ||= []
       path = Navigation.namespace_path(node)
       path_str = Navigation.namespace_str(node)
       node._.to_h.update(
@@ -170,31 +164,17 @@ module RUML
     end
 
     def _compile_ownedElement node
-      inside_namespace node do
-        (node.ownedElement || EMPTY_ARRAY).each do | child |
+        node.ownedElement&.each do | child |
           compile(child)
         end
-      end
     end
 
     def _compile_children node, *names
-      inside_namespace(node) do
         names.each do | name |
-          (node[name] || EMPTY_ARRAY).each do | x |
+          node[name]&.each do | x |
             compile x
           end
         end
-      end
-    end
-
-    def inside_namespace node, &blk
-      @current_stack.push @current
-      begin
-        @current = node
-        yield node
-      ensure
-        @current = @current_stack.pop
-      end
     end
 
     def _log_prefix ; "pass #{pass}" ; end

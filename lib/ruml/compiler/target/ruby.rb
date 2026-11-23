@@ -7,6 +7,7 @@ require 'ruml/core/runtime'
 require 'ruml/core/primitive_types'
 require 'method_source'
 require 'ripper'
+require 'pp'
 
 module RUML::Compiler
   class Target::Ruby < Target
@@ -16,6 +17,11 @@ module RUML::Compiler
     PrimitiveTypes = RUML::Core::PrimitiveTypes
 
     include RUML::Support::Misc
+
+    def default_code_file(root)
+      basename = root.to_s.gsub(/::/, '-').downcase
+      f"tmp/#{basename}.rb"
+    end
 
     def emit_preamble(node)
       line! "# frozen_string_literal: true"
@@ -37,7 +43,9 @@ module RUML::Compiler
       line!
     end
 
-    def emit_root(_node)
+    def emit_root(node)
+      @root_node = root_node
+      @root_path = navigator.path_str(@root_path)
       ns = frontend.root
       case ns
       when ::Class
@@ -58,7 +66,7 @@ module RUML::Compiler
       kind = META_TO_MODULE_CLASS.fetch(node._.metatype)
       desc = "#{kind} #{path_str}"
       declaration = desc.dup
-      binding.pry if path_str =~ /PrimitiveTypes/
+      raise if path_str =~ /PrimitiveTypes/
 
       node._.to_h.update(
         path: path,
@@ -92,7 +100,10 @@ module RUML::Compiler
       end
       line! declaration
 
-      line! "  self.include ::RUML::Core::Runtime::BaseClass"
+      line! "  include ::RUML::Core::Runtime::BaseClass"
+      line! "  ruml.loading(__FILE__, __LINE__)"
+      data = namespace_native_data(node)
+      line! "  ruml.native_data = \n#{PP.pp(data, +"")}"
 
       if is_class
         import_method = nil # "inherited"
@@ -126,9 +137,35 @@ module RUML::Compiler
       end
       line! "  self"
       line! "end # #{desc}"
-      # line! "end # LKJDSLFKJSDLKFJ"
       line! ""
       comment_end! desc
+    end
+
+    def namespace_native_data node
+      node.ownedAttribute ||= []
+      ownedAttribute = node.ownedAttribute.sort_by(&:name).map{|x| attribute_native_data(x)}
+      {
+        name:           node.name,
+        qualifiedName:  navigator.path_str(node),
+        ownedAttribute: ownedAttribute,
+      }
+    end
+
+    def attribute_native_data node
+      opposite = node.opposite && {
+        owner: navigator.path_str(node.opposite.owner),
+        name: node.opposite.name.to_sym,
+      }
+      {
+        owner: navigator.path_str(node.owner),
+        name: node.name.to_sym,
+        type: node.type.to_s,
+        lower: node.lower,
+        upper: node.upper,
+        default: node.default,
+        isAssociation: !! node.owningAssociation,
+        opposite: opposite,
+      }
     end
 
     def instantiation_module node
@@ -145,13 +182,10 @@ module RUML::Compiler
       # comment_end! "TRACE"
     end
 
-    def emit_import node
-      dst_path = module_path(node)
-      node.importedPackage&.each do | src |
-        # binding.pry
-        src_path = module_path(src)
-        line! "::RUML::Core::Runtime::Import.import(::#{dst_path}, ::#{src_path})"
-      end
+    def emit_PackageImport node
+      dst_path = navigator.path_str(node.importingNamespace)
+      src_path = navigator.path_str(node.importedPackage)
+      line! "  ::RUML::Core::Runtime::Import.import_package(::#{dst_path}, ::#{src_path})"
     end
 
     def emit_enumeration node
@@ -267,7 +301,6 @@ RUBY
       if node.isDerived && isOperation?(node)
         emit_operation(node)
       elsif node.owningAssociation
-        binding.pry unless node.opposite
         emit_association(node)
       else
         emit_property(node)
