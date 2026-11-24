@@ -3,7 +3,17 @@
 require 'ruml/core/primitive_types'
 
 describe RUML::Core::PrimitiveTypes do
-  describe "to_native" do
+  describe "as_*" do
+    it "converts" do
+      mod = RUML::Core::PrimitiveType
+      expect(mod.to_Boolean("true")).to eq(true)
+      expect(mod.to_boolean("true")).to eq(true)
+      expect(mod.to_unlimited_natural("123")).to eq(123)
+      expect(mod.to_unlimited_natural("123")).to eq(123)
+    end
+  end
+
+  describe "#to_native" do
     it "coerces data" do
       pt = RUML::Core::PrimitiveType
       m = RUML::Core::PrimitiveTypes

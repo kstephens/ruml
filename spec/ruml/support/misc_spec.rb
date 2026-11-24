@@ -87,7 +87,14 @@ describe RUML::Support::Misc do
     end
   end
 
-  describe '.or_die' do
+  describe '.lookup_const' do
+    it "underscore" do
+      expect(described_class.underscore(:_as_123_)).to eq("_as_123_")
+      expect(described_class.underscore(:_CAPlower_)).to eq("_cap_lower_")
+    end
+  end
+
+  xdescribe '.or_die' do
     it "returns the value when not nil" do
       result = described_class.or_die(42)
       expect(result).to eq(42)

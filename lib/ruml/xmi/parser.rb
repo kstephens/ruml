@@ -270,7 +270,6 @@ module RUML
               logger.debug { "parent=#{parent}" }
               logger.debug { "attr=#{attr.inspect}" }
               logger.debug { "prop=#{parent.__send__(attr)}" }
-              # binding.pry
             end
           when elem.attributes.empty?
             parent.__send__(:"#{elem.name}_add!", elem.content)
