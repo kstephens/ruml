@@ -508,7 +508,7 @@ RUBY
       desc = "Association : #{desc_short} : #{e_type} #{o.lower}..#{upper}"
       o_name = fix_name(o.name)
       e_name = fix_name(e.name)
-      subsets = o.subsets.map{|s| s.to_s.sub(/^.+::/, '').to_sym} # !!! remove namespace
+      subsets = o.subsets.map{|s| path_str_base(s) }
       args = [desc_short, o_name, o_type, o.lower, upper, subsets, e_name, e_type ]
       comment_begin! desc
       if upper == 1

@@ -15,26 +15,30 @@ describe RUML::Core::Notation do
       end
     end.new
   }
+
   describe "#property" do
     it "parses a simple property" do
       obj = subject.property "+ name : String [0..1]"
+      # binding.pry
       expect(obj._.properties).to eq(
         {
           :visibility=>:public,
-         :name=>"name",
-         :type=>"String",
-         :default=>nil,
-         :isDerived=>false,
-         :aggregation => :none,
-         :subsets=>[],
-         :redefines=>[],
-         :isOrdered=>false,
-         :isUnique=>true,
-         :isReadOnly=>false,
-         :isDerivedUnion=>false,
-         :isID=>false,
-         :lower=>0,
-         :upper=>1})
+          :name=>"name",
+          :type=>"String",
+          :default=>nil,
+          :isDerived=>false,
+          :aggregation => :none,
+          :subsets=>[],
+          :redefines=>[],
+          :isOrdered=>false,
+          :isUnique=>true,
+          :isReadOnly=>false,
+          :isDerivedUnion=>false,
+          :isID=>false,
+          :lower=>0,
+          :upper=>1,
+          :opposite => nil,
+        })
       expect(obj.visibility).to eq :public
       expect(obj.name).to eq "name"
       expect(obj.type).to eq "String"
@@ -43,6 +47,11 @@ describe RUML::Core::Notation do
       expect(obj.isOrdered).to eq false
       expect(obj.isUnique).to eq true
       expect([obj.lower, obj.upper]).to eq [0, 1]
+    end
+
+    it "handles a namespaced type" do
+      obj = subject.property("+element : Reflection::Element 0..*")
+      expect(obj.type).to eq("Reflection::Element")
     end
 
     it "parses derived properties and modifiers" do
@@ -82,6 +91,11 @@ describe RUML::Core::Notation do
       expect(obj.isOrdered).to eq true
       expect(obj.isUnique).to eq false
     end
+    it "parses opposite" do
+      obj = subject.property "+ body : String [*] {ordered, nonunique} (opposite A::b)"
+      expect(obj.opposite).to eq("A::b")
+    end
+
 
     it "returns nil for unparsable input" do
       expect(subject.property("+ !!!")).to be_nil
@@ -89,12 +103,15 @@ describe RUML::Core::Notation do
   end
 
   describe "#modifiers" do
-    let(:modifiers) { subject.modifiers "subset a, #subset b, foo, subset PKG::bar" }
+    let(:modifiers) { subject.modifiers "subsets a, #subsets b, foo, subsets PKG::bar" }
     it "parses uncommented items" do
-      expect(modifiers).to eq(["subset a", "foo", "subset PKG::bar"])
+      expect(modifiers).to eq(["subsets a", "foo", "subsets PKG::bar"])
     end
-    it "strips package names" do
-      expect(subject.subsets(modifiers)).to eq(["a", "bar"])
+
+    describe "#subsets" do
+      it "does not strip package names" do
+        expect(subject.subsets(modifiers)).to eq(["a", "PKG::bar"])
+      end
     end
   end
 
@@ -104,7 +121,11 @@ describe RUML::Core::Notation do
       props = obj.to_h.dup
       params = props.delete(:parameter)
       expect(props).to eq(
-        {:isDerived=>false, :name=>"name", :visibility=>:public}
+        {
+          :isDerived=>false,
+          :name=>"name",
+          :visibility=>:public,
+        }
       )
       expect(params.map(&:to_h)).to eq(
         [
@@ -118,25 +139,55 @@ describe RUML::Core::Notation do
       props = obj.to_h.dup
       params = props.delete(:parameter)
       expect(props).to eq(
-        {:isDerived=>false, :name=>"name", :visibility=>:public}
+        {
+          :isDerived=>false,
+          :name=>"name",
+          :visibility=>:public,
+        }
       )
       expect(params.map(&:to_h)).to eq(
         [
-          {:direction=>:return, :lower=>0, :name=>"return", :type=>"String", :upper=>1, default: nil},
+          {
+            :name=>"return",
+            :type=>"String",
+            :lower=>0,
+            :upper=>1,
+            default: nil,
+            :direction=>:return,
+          },
         ]
       )
     end
 
     it "parses without a return type" do
-      obj = subject.operation "- /name(a : Integer)"
+      obj = subject.operation "- /name(a : Integer, b : String 2..*)"
       props = obj.to_h.dup
       params = props.delete(:parameter)
       expect(props).to eq(
-        {:isDerived=>true, :name=>"name", :visibility=>:private}
+        {
+          :isDerived=>true,
+          :name=>"name",
+          :visibility=>:private,
+        }
       )
       expect(params.map(&:to_h)).to eq(
         [
-          {:direction=>:in, :lower=>1, :name=>"a", :type=>"Integer", :upper=>1, default: nil},
+          {
+            :name=>"a",
+            :type=>"Integer",
+            :lower=>1,
+            :upper=>1,
+            :direction=>:in,
+            default: nil,
+          },
+          {
+            :name=>"b",
+            :type=>"String",
+            :lower=>2,
+            :upper=>-1,
+            :direction=>:in,
+            default: nil,
+          },
         ]
       )
     end

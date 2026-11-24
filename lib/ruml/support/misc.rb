@@ -1,9 +1,22 @@
 # frozen_string_literal: true
 
 require 'ruml/support'
+require "zlib"
 
 module RUML::Support::Misc
   extend self
+
+  def underscore(word)
+    underscore!(word.to_s.dup)
+  end
+
+  def underscore!(word)
+    word.gsub!(/([a-z\d]+)([A-Z]+)/, '\1_\2')
+    word.gsub!(/([A-Z][A-Z]+)([^A-Z]+)/, '\1_\2')
+    word.tr!("-", "_")
+    word.downcase!
+    word
+  end
 
   def lookup_const path, root = ::Object
     return nil if path.nil? || path == ""
@@ -62,6 +75,16 @@ module RUML::Support::Misc
     result
   end
 
+  def mkdir_for_file file
+    Pathname[file].parent.mkdir_p()
+    file
+  end
+
+  def with_readonly_file name
+    File.chmod(0644, name) rescue Errno::ENOENT
+    yield name
+    File.chmod(0444, name)
+  end
   def write_readonly_file name, content=nil
     File.chmod(0644, name) rescue Errno::ENOENT
     File.open(name, "w+") do | io |
@@ -69,6 +92,18 @@ module RUML::Support::Misc
       yield io if block_given?
     end
     File.chmod(0444, name)
+  end
+
+  def save_marshal_gz(path, obj, *args)
+    Zlib::GzipWriter.open(path, *args) do |gz|
+      Marshal.dump(obj, gz)
+    end
+  end
+
+  def load_marshal_gz(path, *args)
+    Zlib::GzipReader.open(path, *args) do |gz|
+      Marshal.load(gz)
+    end
   end
 end
 

@@ -30,8 +30,9 @@ module RUML::Core
           isReadOnly: pms.include?("readOnly"),
           isDerivedUnion: !! pms.include?("union"),
           isID: pms.include?("id"),
-          subsets: subsets(pms),
-          redefines: redefines(pms),
+          subsets: subsets(pms),     # !!! NON-STANDARD
+          redefines: redefines(pms), # !!! NON-STANDARD
+          opposite: h[:opposite],    # !!! NON-STANDARD
         }
         if pms.include?("seq") || pms.include?("sequence")
           prop.update(
@@ -49,7 +50,7 @@ module RUML::Core
         suffix = _match(OPERATION_SUFFIX, h[:operation_suffix])
         mods = modifiers(suffix[:modifiers])
         range = multiplicity(suffix[:multiplicity])
-        params = h[:parameters].split(/\s*,\s*/).map!(&:strip).map do | param |
+        params = split_by_comma(h[:parameters]).map do | param |
           parameter(param)
         end
         op = {
@@ -103,14 +104,20 @@ module RUML::Core
     end
 
     def modifiers s
-      (s || '').strip.split(/\s*,\s*/).map! do |pm|
+      split_by_comma(s).map! do |pm|
         pm.strip!
         pm.split(/\s+/).join(' ') unless pm[0] == "#"
       end.compact
     end
 
     def modifier_values pms, key
-      pms.select { |pm| pm.start_with?("#{key} ") }.map { |pm| pm.sub("#{key} ", "").to_sym }
+      pms
+      .select { |pm| pm.start_with?("#{key} ") }
+      .map! { |pm| pm.sub("#{key} ", "") }
+    end
+
+    def split_by_comma(s)
+      (s || '').strip.split(/\s*,\s*/).map(&:strip)
     end
 
     def multiplicity m
@@ -139,11 +146,23 @@ module RUML::Core
       str = str.strip
       return unless (match = _match(rx, str))
       properties = (yield match) || match
+      mods = modifiers(match[:modifiers])
+      range = multiplicity(match[:multiplicity])
+      notation = {
+        notation: str,
+        match: match,
+        name: match[:name],
+        modifiers: mods,
+        multiplicity: range,
+        properties: properties,
+      }
+      # properties[:_notation] = notation # ???
       obj = _new(ns, type, properties)
       obj._.metatype = type.to_sym
-      obj._.properties = properties
-      obj._.match = match
-      obj._.notation = str
+      obj._.notation = str # notation
+      obj._.properties = properties # !!!
+      # obj._.match = match
+      # obj._.notation = str
       obj
     end
 
@@ -169,14 +188,18 @@ module RUML::Core
     BOOLEAN = %r{(?<boolean>true|false)}
     KEYWORD = %r{(?<keyword>[_a-zA-Z][_a-zA-Z0-9]*)}
     CONSTANT = %r{(?:#{STRING}|#{FLOAT}|#{INTEGER}|#{BOOLEAN}|#{KEYWORD})}
+    IDENTIFIER = %r{(?:[_a-zA-Z][_a-zA-Z0-9]*)}
+    QUALIFIED_IDENTIFIER = %r{#{IDENTIFIER}(?:::#{IDENTIFIER})*}
 
     VISIBILITY = %r{(?<visibility>[-+\#~])}
     IS_DERIVED = %r{(?<isDerived>/)}
-    NAME = %r{(?<name>[_a-zA-Z][_a-zA-Z0-9]*)}
-    TYPE = %r{(?::\s*(?<type>(?:[A-Z][_a-zA-Z0-9]*(?:::[A-Z][_a-zA-Z0-9]*)*)))\s*}
+    NAME = %r{(?<name>#{IDENTIFIER})}
+    QUALIFIED_NAME = %r{(?<name>#{QUALIFIED_IDENTIFIER})}
+    TYPE = %r{(?::\s*(?<type>#{QUALIFIED_IDENTIFIER}))}
     MULTIPLICITY = %r{(?:\[?(?<multiplicity>\d+(?:\.\.(?:\d+|\*))?|\*)\]?)}
     DEFAULT = %r{(?:=\s*(?<default>#{CONSTANT}))}
     MODIFIERS = %r{(?:\{(?<modifiers>[^\}]*)\})}
+    OPPOSITE = %r{(?:\(opposite\s+(?<opposite>[^\)]*)\))}
 
     PROPERTY = %r{\A
       \s*#{VISIBILITY}?
@@ -186,6 +209,7 @@ module RUML::Core
       \s*#{MULTIPLICITY}?
       \s*#{DEFAULT}?
       \s*#{MODIFIERS}?
+      \s*#{OPPOSITE}?
       \s*
     \Z}x
     PARAMETER = %r{
