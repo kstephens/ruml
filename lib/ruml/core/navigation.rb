@@ -21,7 +21,7 @@ module RUML::Core
     def ancestors node
       result = []
       for_ancestors(node) do | node |
-        result << node if node && node != ""
+        result << node
       end
       result.reverse!
     end

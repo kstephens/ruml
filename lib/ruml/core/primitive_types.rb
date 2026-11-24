@@ -20,11 +20,6 @@ module RUML::Core
         include PrimitiveType
 
         COERCIONS = {
-          nil => false,
-          0 => false,
-          1 => true,
-          true => true,
-          false => false,
           :true   => true,
           :false  => false,
           'true'  => true,
@@ -36,9 +31,10 @@ module RUML::Core
 
         def self.__ruml_coerce__ x
           case x
-          when :TrueClass, :FalseClass
+          when ::TrueClass, ::FalseClass
             x
-          when ::Integer, ::Float, ::Rational, ::Complex then ! x.zero?
+          when ::Numeric
+            ! x.zero?
           else
             val = COERCIONS[x]
             raise ::CoercionError, "coerce : #{self} : given #{x.inspect}" if val.nil?
@@ -79,7 +75,7 @@ module RUML::Core
           when :*, '*'
             UNLIMITED
           else
-            i = x.to_i
+            i = Integer(x)
             raise CoercionError, "not >= 0" unless i >= 0
             i
           end

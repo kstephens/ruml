@@ -246,14 +246,13 @@ module RUML
         raise BuilderError, "association : #{notation.inspect}" unless prop
         prop._.type_name ||= prop.type
         prop.type = _find_node_scoped(owner, prop.type) || prop.type
-        binding.pry if ::String === prop.type
+        raise BuilderError if ::String === prop.type
         prop
       end
       [props, props.reverse].each do | (p1, p2) |
         p1.opposite = p2
         p1.owner = p2.type
         p1.class = p2.owner
-        # binding.pry
       end
 
       association = _build(:UML, :Association, opts)
@@ -265,7 +264,6 @@ module RUML
 
       props.each do | prop |
         owner = prop.owner
-        # binding.pry unless owner && owner.ownedAttribute
         _setup_property(prop, prop.owner)
 
         association.ownedEnd << prop
@@ -280,7 +278,6 @@ module RUML
       end
 
       owner.ownedElement << association
-      # binding.pry
     end
 
     def operation notation, &blk
@@ -456,9 +453,6 @@ module RUML
       opts = @opts.merge(opts)
       c = Compiler::Frontend.new(opts)
       c.run(@root_node)
-      target = c.target
-      # puts(target.to_s)
-      # binding.pry
       c
     end
 
