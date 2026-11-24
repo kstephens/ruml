@@ -252,9 +252,10 @@ module RUML::Compiler
     def emit_operation(node)
       name = node.name.to_sym
       body = node._.body
-      if ! body && node._.blk
-        body = extract_method_body(node._.blk.source.to_s)
-      end
+      # Unset blk to avoid serialization issue.
+      blk = node._.blk
+      node._.blk = nil
+      body ||= extract_method_body(blk.source.to_s)
       line! <<"RUBY"
 def #{name}
   #{body}

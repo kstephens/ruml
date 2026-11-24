@@ -22,7 +22,7 @@ module Runtime
     end
     def loading(file, line)
       @native_file, @native_line = file, line
-      puts("##RUML loading #{native_file}:#{native_line} : #{@native}")
+      # puts("##RUML loading #{native_file}:#{native_line} : #{@native}")
     end
     def inspect full=false
       return super() if full

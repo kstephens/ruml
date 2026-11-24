@@ -33,7 +33,8 @@ module RUML
     def initialize opts = nil, &blk
       @opts = opts || {}
       @_log_verbose = true # @opts[:verbose]
-      @factory = RUML::Boot::Factory.new
+      @root_module = @opts[:root]
+      @factory = RUML::Boot::Factory.new(root: @root_module)
       @notation = RUML::Core::Notation.new(@factory)
       @contexts = ::RUML::Support::Contexts.new
       @navigator = @n = RUML::Core::Navigation::Navigator.new
@@ -64,7 +65,14 @@ module RUML
       # self
     end
 
-    def _end
+    def _with_retry &blk
+      yield
+    # rescue RetryOn
+    #   binding.pry
+    #   @_with_retry << blk
+    end
+
+    def _end # !!! unused
       total = @_with_retry.size
       while @_with_retry.size < total
         until @_with_retry
@@ -76,18 +84,10 @@ module RUML
             @_with_retry << blk
           end
         end
-        binding.pry
       end
     end
 
-    def _with_retry &blk
-      yield
-    # rescue RetryOn
-    #   binding.pry
-    #   @_with_retry << blk
-    end
-
-    # Include a native Ruby Module into a MOF namespace:
+    # Include a native Ruby Module into a UML namespace:
     def include *modules
       (_current(:Namespace)._.ruby_include ||= UniqueArray.new).concat(modules)
     end
@@ -100,7 +100,7 @@ module RUML
       package = _current(:Package)
       _build(:UML, :Package, {name: name.to_s}, [name]) do | node |
         node.nestingPackage = package
-        package.nestedPackage << node if package
+        (package.nestedPackage ||= UniqueArray.new) << node if package
         _with_namespace(node, namespace, &blk)
       end
     end
@@ -158,10 +158,10 @@ module RUML
     alias_method :superclass, :superClass
 
     def _superClass name
+      name = name.to_s
       cls = _current(:Class)
       scls = _find_node_scoped(cls.owner, name)
-      binding.pry unless scls
-      raise BuilderError, "superClass #{name.inspect}" unless scls
+      raise BuilderError, "#{navigator.path_str(cls)} superClass : cannot find #{name.inspect}" unless scls
       cls.superClass << scls
     end
 

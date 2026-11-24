@@ -6,6 +6,8 @@ require 'ruml/core/primitive_types'
 require 'ruml/boot/builder'
 
 module RUML::Boot; end
+# module Model; end # placeholder
+
 RUML::Boot::Builder.new(root: RUML::Boot) do
     namespace :Model do
       import RUML::Core::PrimitiveTypes
@@ -232,6 +234,7 @@ structuredClassifier, subsets classifier}"
       association \
         "+ subsettedProperty : Property * {subsets redefinedElement}",
         "+ property : Property *"
+      # 9.10.39 A_redefinedProperty_prop"
       association \
         "+ property : Property * {subsets
 redefinableElement}",
@@ -271,6 +274,7 @@ redefinableElement}",
       superClass :MultiplicityElement
       property "+direction : ParameterDirectionKind = in"
     end
+
     class_ :Operation do
       superClass :NamedElement
       property "+/isOrdered : Boolean = false{readOnly}"
@@ -281,6 +285,12 @@ redefinableElement}",
       association \
         "+ operation : Operation 0..1 {subsets ownerFormalParam}", \
         "+ ownedParameter : Parameter * {ordered, redefines ownedParameter}"
+      # 9.10.38 A_redefinedOperation_operation [Association]
+      association \
+        "+operation : Operation [0..*] {subsets A_redefinedElement_redefinableElement::redefinableElement} (opposite
+Operation::redefinedOperation)",
+        "redefinedOperation : Operation [0..*]{subsets RedefinableElement::redefinedElement} (opposite
+A_redefinedOperation_operation::operation)"
     end
     class_ :ParameterDirectionKind do #
       stereotype :enumeration
@@ -382,10 +392,34 @@ redefinableElement}",
     import "UML"
 
     class_ :Root do
-      superclass "Element"
+      superclass :Element
       association \
         "+root : Root 0..1",
         "+packagedElement : Element * {subsets ownedElement}"
+    end
+  end
+
+  package :RUMLEXT do
+    import "UML"
+    package :Native do
+      class_ :NativeElement do
+        superclass :Element
+        property "+nativeName : String"
+      end
+
+      class_ :NativeReference do
+        superclass :Element
+        association \
+          "+ nativeElement : NativeElement 1", \
+          "+ element : Element 1"
+      end
+
+      class_ :Include do
+        superclass :NativeReference
+      end
+      class_ :Extend do
+        superclass :NativeReference
+      end
     end
   end
 end

@@ -64,7 +64,6 @@ module RUML::Core
 
     def ownedElement_by_name node, name
       raise unless ::String === name
-      binding.pry unless ::String === name
       node.ownedElement&.find{|c| c.name == name}
     end
 

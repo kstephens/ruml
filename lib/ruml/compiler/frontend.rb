@@ -17,6 +17,7 @@ module RUML
     Navigation = RUML::Core::Navigation
 
     include RUML::Support::Logging::Basic
+    include RUML::Support::Misc
     EMPTY_ARRAY = [ ].freeze unless defined? EMPTY_ARRAY
 
     attr_reader :root, :pass, :root_node
@@ -35,10 +36,12 @@ module RUML
       @target = @target.new unless RUML::Compiler::Target === @target
       @target.frontend = self
       @file = @opts[:file] || @target.default_code_file(@root.to_s)
+      @model_file = @opts[:model_file] || (@file && "#{@file}.model.marshall.gz")
       @pass = 1
     end
 
     def run node
+      @root_node = node
       @target.root_node = node
       @target.root_node_path = @navigator.path_str(node)
       @target.emit_preamble(node)
@@ -52,8 +55,18 @@ module RUML
 
     def save_code()
       if @file
-        RUML::Support::Misc.write_readonly_file(@file, code)
-        $stderr.puts("#{self.class} : wrote #{@file}")
+        with_readonly_file(@file) do
+          File.write(@file, @code)
+        end
+        $stderr.puts("#{self.class} : wrote #{@code_file}")
+      end
+      if @model_file
+        with_readonly_file(@model_file) do
+          # Proc.define_method(:_dump_data) {|| nil}
+          save_marshal_gz(@model_file, @root_node)
+        end
+        # obj = load_marshal_gz(@model_file)
+        # binding.pry
       end
       self
     end

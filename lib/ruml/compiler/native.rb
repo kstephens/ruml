@@ -56,7 +56,6 @@ module RUML::Compiler
         def initialize obj
           @__ruml_obj__ = obj
           super({})
-          # __initialize__
         end
 
         def ownedElement ; @ownedElement ||= [] ; end
