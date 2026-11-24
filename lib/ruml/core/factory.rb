@@ -19,13 +19,17 @@ module RUML::Core
         return instance
       end
       # puts("new(#{ns.inspect}, #{type.inspect}) => ...")
-      instance = class_module(ns, type).new(props)
+      instance = make_instance(ns, type, props, id)
       # puts("new(#{ns.inspect}, #{type.inspect}) => #{instance.inspect}")
       # binding.pry
       @instance_by_id[id] = instance if id
       instance
     rescue => e
       reraise e, "new(#{ns.inspect}, #{type.inspect}, #{props.inspect}, #{id.inspect}}"
+    end
+
+    def make_instance ns, type, props, _id
+      class_module(ns, type).new(props)
     end
 
     def class_module ns, type
