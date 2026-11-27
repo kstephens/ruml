@@ -2,31 +2,49 @@
 
 require "zlib"
 require "set"
+
 module RUML::Core
 module Runtime
   N = 1000000000000000 unless defined? N
   STAR = (0 .. N) unless defined? STAR
 
+  # !!! inherit RUML::Error
   class Error < StandardError ; end
   class UninstantiatableError < Error ; end
 
 
   # Metadata hook for Ruby Module
+  # !!! create one top-level instance that:
+  # loads the metamodel.marshall.gz.
+  # can locate metadata for any module in the 
+  # code.rb for the entire.
+  # perhaps it should use native.rb.
+  # this should also provide a Factory and
+  # introspection object.
   class Meta
-    attr_reader :native, :native_file, :native_line
+    # !!! rename to native_module
+    attr_reader :native
+    attr_reader :native_file, :native_line
     attr_accessor :native_data
 
     def initialize ruby_module
       @native = ruby_module
       @native_data = {}
     end
+    
     def loading(file, line)
       @native_file, @native_line = file, line
       # puts("##RUML loading #{native_file}:#{native_line} : #{@native}")
     end
+    
     def inspect full=false
       return super() if full
       "#<#{self.class} #{@native} #{@native_file}>"
+    end
+    
+    # !!! see Enumeration?
+    def eumerate!(*names)
+      # ...
     end
   end
 
@@ -49,13 +67,16 @@ module Runtime
 
   module Uninstantiatable
     include BaseClass
+    
     def self.included target
       super(target)
       target.extend(RUML_Uninstantiatable_ModuleMethods)
       target.include(RUML_Uninstantiatable_InstanceMethods)
     end
+    
     module RUML_Uninstantiatable_ModuleMethods
     end
+    
     module RUML_Uninstantiatable_InstanceMethods
       def initialize *_args
         raise UninstantiatableError, "#{self.class}"
@@ -65,6 +86,7 @@ module Runtime
 
   module Instantiable
     include BaseClass
+    
     def self.included target
       super(target)
       target.extend(RUML_Instantiable_ModuleMethods)
@@ -75,6 +97,7 @@ module Runtime
     end
 
     module RUML_Instantiable_InstanceMethods
+      # !!! should this be driven by metamodel?
       def __ruml_initialize__ opts = nil, &blk
         super(opts)
         opts&.each do | k, v |
@@ -93,6 +116,7 @@ module Runtime
   end
 
     module Import
+      # !!! is this introspection metadata?
       def self.importable_names package
         package.constants.reject{|name| name.to_s =~ /\ARUML_/}
       end
@@ -105,6 +129,13 @@ module Runtime
     end
 
     module Enumeration
+      
+      # !!! instantiate Enums at loadtime, then replace new and initialize, with __ruml_coerce__.
+      # !!! is there a hook at the end of a module definition?
+      # ie:
+      # class Enum
+      # ...
+      # end.ruml.enumeration!(a, :b, ...)
       def self.included(target)
         super(target)
         target.extend(RUML_Enumeration_ClassMethods)
@@ -139,6 +170,9 @@ module Runtime
           end
         end
         alias_method :[], :__ruml_coerce__
+        
+        # !!! disable Class new and create after enums are instanitated.
+        # do this at load time, instead of caching.
         def enumeration_by_name x
           (@enumeration_by_name ||=
             (
@@ -147,6 +181,8 @@ module Runtime
             ).to_h.freeze
           ).fetch(x)
         end
+        
+        # !!! disable new after this is called.
         def enumerations
           @__enumerations__ ||= enumeration_names.map{|name| new(name: name.to_s.freeze)}.freeze
         end
