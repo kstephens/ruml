@@ -5,6 +5,7 @@ require 'ruml/support/misc'
 
 
 module RUML::Core
+  # !!! these methods are repeated elsewhere.
   module Navigation
     class NavigationError < RUML::Error; end
 
