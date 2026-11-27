@@ -8,7 +8,8 @@ require 'ruml/boot/builder'
 module RUML::Boot; end
 # module Model; end # placeholder
 
-RUML::Boot::Builder.new(root: RUML::Boot) do
+ !# !!! rename root_module
+  RUML::Boot::Builder.new(root: RUML::Boot) do
     namespace :Model do
       import RUML::Core::PrimitiveTypes
 
@@ -425,6 +426,8 @@ A_redefinedOperation_operation::operation)"
 end
 end.compile(
   target: :Ruby,
+  # !!! rename code_file
   file: "tmp/ruml-boot-model.rb",
+  # !!! add model_file
 ).eval_code()
 
