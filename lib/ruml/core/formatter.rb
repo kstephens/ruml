@@ -3,6 +3,9 @@
 require 'ruml/core'
 
 module RUML::Core
+    # !!! use Introspection (as mentioned) in nav.rb
+    # Use the actual metamodel to determine attributes vs association Props.
+    # Use Traversal object, if possible.
     class Formatter
       def initialize(out: $stdout, max_depth: nil)
         @out = out
@@ -20,6 +23,7 @@ module RUML::Core
         associations, properties = attributes(obj).partition{|x| x[:isAssociation]}
         return unless emit_basic(obj, properties)
         emit_associations(obj, associations)
+        # !!! delete
         # binding.pry if @depth > 10
       end
 
@@ -63,6 +67,7 @@ module RUML::Core
         end
       end
 
+      # !!! use Introspection
       def obj_name obj
         obj.name rescue [:UNNAMED]
       end
@@ -71,11 +76,13 @@ module RUML::Core
         attrs.map do | prop |
           name = prop[:name]
           sel = :"#{name}_multi!"
+          # !!! use introspection:
           [name, (obj.send(sel) rescue [:UNREACHABLE])]
         end
       end
 
       def attributes obj
+        # !!! presumes too much.
         obj.class.ruml.native_data[:ownedAttribute]
       end
 
