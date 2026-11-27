@@ -3,6 +3,7 @@
 require 'ruml/core'
 
 module RUML::Core::Misc
+  # !!! Use MOF::Reflection container?
   class UniqueArray < ::Array
     def push x
       super(x)
