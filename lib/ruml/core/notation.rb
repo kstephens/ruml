@@ -85,6 +85,7 @@ module RUML::Core
         range = multiplicity(h[:multiplicity])
         # !!! use Factory to map enums?
         # this could be simpler.
+        # default then validate.
         direction = [:in, :out, :inout, :return].find{|dir| mods.include?(dir.to_s)} || :in
         {
           name: h[:name],
@@ -102,6 +103,8 @@ module RUML::Core
     end 
     
     def visibility s
+      # !!! default then validate.
+      # move to factory/introspection
       VISIBILITY_NAME.fetch(s || '+')
     end
 
@@ -131,7 +134,7 @@ module RUML::Core
       (s || '').strip.split(/\s*,\s*/).map(&:strip)
     end
 
-    # !!! refactor?
+    # !!! refactor to core/misc.rb
     def multiplicity m
       case m
       when nil
