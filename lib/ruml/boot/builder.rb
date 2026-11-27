@@ -72,7 +72,7 @@ module RUML
     #   @_with_retry << blk
     end
 
-    def _end # !!! unused
+    def _end # !!! unused?
       total = @_with_retry.size
       while @_with_retry.size < total
         until @_with_retry
@@ -88,6 +88,7 @@ module RUML
     end
 
     # Include a native Ruby Module into a UML namespace:
+    # !!! rename include_module or include_native
     def include *modules
       (_current(:Namespace)._.ruby_include ||= UniqueArray.new).concat(modules)
     end
@@ -155,6 +156,7 @@ module RUML
         end
       end
     end
+    # !!! remove this:
     alias_method :superclass, :superClass
 
     def _superClass name
@@ -172,6 +174,8 @@ module RUML
       end
     end
 
+    # !!! do generalizations actually work?
+    # write a test.
     def generalization *args
       specific = _current(:Classifier)
       args.each do | name |
@@ -214,6 +218,8 @@ module RUML
     def _setup_property(prop, owner)
       prop._.type_name ||= prop.type
       prop.type = _find_node_scoped(owner, prop.type) || prop.type
+      # !!! are these really already initialize?
+      # add a check here to find out.
       prop.class ||= owner
       prop.owner ||= owner
       # binding.pry if prop._.notation =~ /String/
@@ -286,6 +292,7 @@ module RUML
       node.class = _current(:Class)
       node.class.ownedOperation << node
       if blk
+        # !!! decode the block here, instead of Ruby backend?
         node.parameter = blk.parameters.map do |(_kind, name)|
           _ruby_parameter(name, direction: :in)
         end
@@ -296,6 +303,7 @@ module RUML
         param.owner = node
       end
     end
+    # !!! remove this
     # alias_method :method, :operation
 
     def constant name, value=nil, &blk
@@ -358,6 +366,7 @@ module RUML
       node.stereotype << stereotype
     end
 
+    # !!! inline this:
     def _get_stereotype(name)
       name = name.to_s
       (@stereotypes[name] ||= _build(:UML, :Stereotype, {name: name}))
@@ -375,6 +384,7 @@ module RUML
     def _build(ns, type, properties, blk=nil)
       node = @factory.new(ns, type, properties)
       node_parent = _current(:node)
+      # !!! is this used?
       node_parent._.node_children << node if node_parent
       node.owner = node_parent
       node.ownedElement = UniqueArray.new # !!!
@@ -384,8 +394,10 @@ module RUML
       node._.to_h.update(
         metatype: type,
         blk: blk,
+        # !!! can these be handled by Runtime::Meta?
         node_parent: node_parent,
         node_children: UniqueArray.new,
+        # !!! can this be handled by Runtime::Meta?
         ruby_native: false,
         ruby_include: UniqueArray.new,
         ruby_extend: UniqueArray.new,
@@ -403,6 +415,7 @@ module RUML
       node
     end
 
+    # !!! need this anymore?
     def _args_opts args, defaults={}
       opts = ::Hash === args[-1] ? args.pop : {}
       [args, defaults.merge(opts)]
@@ -421,6 +434,7 @@ module RUML
       @n.find_node_scoped(node, name.to_s)
     end
 
+    # !!! delete this
     # def _find_node_or_die node, name, *args, &blk
     #   return name if ::RUML::Compiler::AST::Node === name
     #   node = @native[node]
@@ -428,6 +442,7 @@ module RUML
     #   result
     # end
 
+    # !!! is this neccesary?
     def _name arg
       case arg
       when ::String, ::Symbol then arg.to_s
@@ -445,6 +460,7 @@ module RUML
     end
 
     def _with(node, name=nil, &blk)
+      # !!! inline this?
       name ||= node._.metatype.to_sym
       @contexts[name].with(node, &blk)
     end
