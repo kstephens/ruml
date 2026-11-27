@@ -4,8 +4,11 @@ require 'ruml/core'
 
 module RUML::Core
   module MOF::Reflection
+    # !!! what is Base here?
     class Object < Base
       def get(property:)
+        # !!! what inits this?
+        # rename to @_impl.
         @properties[property]
       end
       def equals(element:) # : Boolean{query}
@@ -44,6 +47,7 @@ module RUML::Core
       end
     end
 
+    # !!! hook into PrimitiveTypes
     class Factory < Element
       # createFromString(dataType: DataType, string: String): Object
       def createFromString(dataType:, string:)
@@ -73,12 +77,16 @@ module RUML::Core
     end
 
     module Common
+      # !!! subclass Array and replace Misc::UniqueArray!
+      # change RefCol to a module?
+      # can these correspond with the property modifiers: for Set, Bag, Ordered, etc?
       class ReflectiveCollection < Reflection::Object
         # !RUBY
         include ::Enumerable
 
         def initialize
           super()
+          # !!! rename to @_impl.
           @_objects = []
         end
         # add(object: Object): Boolean
