@@ -9,6 +9,7 @@ module RUML::Core
   class Factory
     def initialize root: nil
       @root = root or raise ArgumentError
+      # !!! rename namespace_module, add argument.
       @root_module = {}
       @class_module = {}
       @instance_by_id = {}
@@ -28,6 +29,7 @@ module RUML::Core
       reraise e, "new(#{ns.inspect}, #{type.inspect}, #{props.inspect}, #{id.inspect}}"
     end
 
+    # rename to create()
     def make_instance ns, type, props, _id
       class_module(ns, type).new(props)
     end
@@ -41,11 +43,14 @@ module RUML::Core
       lookup_const(root_module(ns), type.to_s)
     end
 
+    # !!! rename namespace module.
     def root_module ns
+      # !!! coerce and cache ns here.
       @root_module[ns] ||= @root.const_get(ns.to_s.upcase.to_sym, false)
     end
 
     def lookup_const base, name
+      # cache this:
       path = RUML::Core::Navigation.split_path(name.to_s)
       # puts([base, path].inspect)
       RUML::Support::Misc.lookup_const(path, base)
