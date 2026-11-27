@@ -6,16 +6,23 @@ require 'ruml/support/misc'
 
 module RUML::Core
   # !!! these methods are repeated elsewhere.
+  # should this be integrated into an "introspection" 
+  # module with Factory?  
+  # Perhaps integrated with Runtime::Meta?
+  # rename this to Introspection.
   module Navigation
     class NavigationError < RUML::Error; end
 
+    # !!! is this used?
     module Navigated; end
     extend self
 
+    # !!! change this to an Enumerator:
     def for_ancestors node
       while node
         yield node
         raise "for_ancestors: loop detected: #{node.inspect}" if node == node.owner
+        # !!! parameterize this to follow any "parent" attr.
         node = node.owner
       end
     end
@@ -26,12 +33,14 @@ module RUML::Core
       end
       result.reverse!
     end
+    # !!! remove theses and fix references:
     alias :ancestors_path :ancestors
     alias :namespace_path :ancestors
 
     def path_str(node)
       join_path(ancestors_path(node).map(&:name))
     end
+    # !!! remove and fix references:
     alias_method :namespace_str, :path_str
 
     def join_path(names)
@@ -49,6 +58,8 @@ module RUML::Core
       end
     end
 
+    # !!! reuse ancestors?
+    # parameterizr node.owner.
     def root_node node # -> Node
       while node.owner
         raise "root_node: loop detected: #{node.inspect}" if node == node.owner
@@ -57,12 +68,14 @@ module RUML::Core
       node
     end
 
+    # !!! same as ancestors(node).to_a.reverse!
     def node_ancestors node
       result = []
       for_ancestors(node) {|node| result << node}
       result.reverse!
     end
-
+    
+    # !!! parameterize
     def ownedElement_by_name node, name
       raise unless ::String === name
       node.ownedElement&.find{|c| c.name == name}
@@ -94,9 +107,12 @@ module RUML::Core
       end
       path.inject(node) do | node, name |
         name = name.name unless ::String === name
+        # !!! delete this:
         binding.pry if ::Array === node
+        # !!! refactor these two into a single method:
         found = ownedElement_by_name(node, name)
         found ||= importedElement_by_name(node, name) if imports # !!! kinda
+        # !!! remove this
         binding.pry if ::Array === found
         return nil unless found
         found
@@ -105,6 +121,7 @@ module RUML::Core
 
     def find_node_scoped node, path, imports=true
       path = split_path(path)
+      # !!! delete me.
       # seen = Set.new
       for_ancestors(node) do | ancestor |
         if (found = find_node(ancestor, path, imports))
@@ -115,6 +132,7 @@ module RUML::Core
 
     def find_node_or_die(node, name, msg=nil, &blk)
       return node if node.to_s == name
+      # !!! delete:
       binding.pry unless find_node_scoped(node, name)
       RUML::Support::Misc.or_die(find_node_scoped(node, name), NavigationError,
           "#{msg} : cannot find #{name.inspect} in #{namespace_str(node)}", &blk)
@@ -134,14 +152,18 @@ module RUML::Core
         when nil
           nil
         when ::String, ::Symbol
+          # !!! reuse split_path.
           names.concat(x.to_s.split("::"))
+        # !!! use Enumerable
         when ::Array
           queue.unshift(x)
+        # !!! is this used?
         when Navigated
           # ??? should this be names = namespace_path(x) since it's rooted?
           names.concat(namespace_path(x))
         else
           names.push(x.name)
+          # !!! delete:
           # if x.respond_to?(:name)
           #   names.push(x.name)
           # else
@@ -151,8 +173,11 @@ module RUML::Core
       end
       names
     end
-
+    
+    # !!! these are introspections NOT navigations.
     def isClass? node
+      # !!! can we avoid _ with an Introspection object?
+      
       node._.metatype == :Class # rescue false
     end
 
@@ -186,8 +211,12 @@ module RUML::Core
       node&.stereotype&.find{|x| x.name == name}
     end
 
+    # !!! delete if we refactor into an Introspector.
     class Navigator
       include Navigation
+      # !!! are these worth or safe to cache?
+      # premature optimization.
+      # delete this, we can revive it.
       def self.cache *meths
         meths.each do | meth |
           class_eval(<<"RUBY")
