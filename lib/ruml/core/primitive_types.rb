@@ -15,6 +15,10 @@ module RUML::Core
     end
 
     # See: vendor/www.omg.org/spec/UML/20161101/PrimitiveTypes.xmi:
+    # !!! how should this be connected to
+    # XMI hrefs?
+    # how do we merge implementatons,
+    # and pthers into emitted code?
     module PrimitiveTypes
       class Boolean
         include PrimitiveType
