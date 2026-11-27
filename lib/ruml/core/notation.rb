@@ -30,6 +30,9 @@ module RUML::Core
           isReadOnly: pms.include?("readOnly"),
           isDerivedUnion: !! pms.include?("union"),
           isID: pms.include?("id"),
+          # !!! can these be outofband such they are compatible
+          # with the metamodel props?
+          # should the Factor handle it?
           subsets: subsets(pms),     # !!! NON-STANDARD
           redefines: redefines(pms), # !!! NON-STANDARD
           opposite: h[:opposite],    # !!! NON-STANDARD
@@ -59,6 +62,7 @@ module RUML::Core
           name: prefix[:name],
           parameter: params,
         }
+        # !!! delete.
         # binding.pry if $stop_here
         if suffix[:type]
           op[:parameter] << _new(
@@ -79,6 +83,8 @@ module RUML::Core
       _parse(PARAMETER, x, :UML, :Parameter) do | h |
         mods = modifiers(h[:modifiers])
         range = multiplicity(h[:multiplicity])
+        # !!! use Factory to map enums?
+        # this could be simpler.
         direction = [:in, :out, :inout, :return].find{|dir| mods.include?(dir.to_s)} || :in
         {
           name: h[:name],
@@ -91,6 +97,10 @@ module RUML::Core
       end
     end
 
+    def direction x
+      # !!! 
+    end 
+    
     def visibility s
       VISIBILITY_NAME.fetch(s || '+')
     end
@@ -116,10 +126,12 @@ module RUML::Core
       .map! { |pm| pm.sub("#{key} ", "") }
     end
 
+    # !!! refactor into Misc?
     def split_by_comma(s)
       (s || '').strip.split(/\s*,\s*/).map(&:strip)
     end
 
+    # !!! refactor?
     def multiplicity m
       case m
       when nil
@@ -158,6 +170,8 @@ module RUML::Core
       }
       # properties[:_notation] = notation # ???
       obj = _new(ns, type, properties)
+      # !!! can this be out of band?
+      # introspection/factory responsiblitu?
       obj._.metatype = type.to_sym
       obj._.notation = str # notation
       obj._.properties = properties # !!!
