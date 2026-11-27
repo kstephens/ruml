@@ -9,7 +9,8 @@ module RUML::Core
   # should this be integrated into an "introspection" 
   # module with Factory?  
   # Perhaps integrated with Runtime::Meta?
-  # rename this to Introspection.
+  # rename this to Introspection?
+  # Should it reuse/integrate MOF::Introspection?
   module Navigation
     class NavigationError < RUML::Error; end
 
