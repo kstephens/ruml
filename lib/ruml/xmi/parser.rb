@@ -20,6 +20,23 @@ module RUML
       end
     end
 
+    
+    # !!! change the phases
+    # 1. scan all nodes for xmi idref and ids
+    # 2. resolve any external href resource, eg PrimitiveType.xmi
+    # use the nokogiri info hash to store decoded xmi attr and mof relations
+    # 3. use metamodel to distinguish between xml attra that should
+    # be uml assocs, props or lookup by name.
+    # eg. the UML.xmi Generalization uses a 'general="NAME"' xml attr that is the NamedElement.name of a Classifier.
+    # this may be 
+    # . inferrable from the MOF.xmi 
+    # . UML metamodel created from Boot::Builder, 
+    # part of the XMI protocol spec
+    # OR is just a one-off choice in UML.xmi.
+    # 4. construct objects with prop and assoc links
+    # this should not require too many assumptions re: owner/ownedElement assoc, etc.
+    # avoid using AST Meta injection by '_' extensions.
+    
     class Parser
       extend Forwardable
       include RUML::Support::Logging::Basic
@@ -161,6 +178,7 @@ module RUML
         @hrefs = {}
         @elem_stack = []
         @obj_stack = []
+        # !!! @xmi_id to node = {}
         @xmi_id_to_object = {}
         @object_to_xmi_id = {}
         @root_object = nil
@@ -170,6 +188,7 @@ module RUML
         setup
         @phase = :start
         @url = url.to_s
+        #!!! is this needed?
         @obj_stack.push(@root_obj)
         @dom = @top_level.load_xml(@url)
         @phase = :build
