@@ -12,6 +12,7 @@ require "set"
 
 module RUML
   module XMI
+    # !!! refactor into RUML::Error
     class ParserError < ::RUML::Error
       attr_accessor :reason, :data
       def initialize msg=nil, reason=nil, data=nil
