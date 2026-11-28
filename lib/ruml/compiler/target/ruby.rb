@@ -82,6 +82,7 @@ module RUML::Compiler
       declaration = desc.dup
       raise if path_str =~ /PrimitiveTypes/
 
+      # !!! helper inject into binding of caller.
       node._.to_h.update(
         path: path,
         path_str: path_str,
@@ -155,6 +156,7 @@ module RUML::Compiler
       comment_end! desc
     end
 
+    # !!! helper
     def namespace_native_data node
       node.ownedAttribute ||= []
       ownedAttribute = node.ownedAttribute.sort_by(&:name).map{|x| attribute_native_data(x)}
@@ -165,6 +167,7 @@ module RUML::Compiler
       }
     end
 
+    # !!! helper?
     def attribute_native_data node
       opposite = node.opposite && {
         owner: navigator.path_str(node.opposite.owner),
@@ -182,6 +185,7 @@ module RUML::Compiler
       }
     end
 
+    # !!! helper
     def instantiation_module node
       if node.isAbstract
         "::RUML::Core::Runtime::Uninstantiatable"
@@ -196,12 +200,14 @@ module RUML::Compiler
       # comment_end! "TRACE"
     end
 
+    # !!! helper
     def emit_PackageImport node
       dst_path = navigator.path_str(node.importingNamespace)
       src_path = navigator.path_str(node.importedPackage)
       line! "  ::RUML::Core::Runtime::Import.import_package(::#{dst_path}, ::#{src_path})"
     end
 
+    # !!! template
     def emit_enumeration node
       names = (node.ownedLiteral || []).map(&:name)
       return "" if names.empty?
@@ -213,6 +219,7 @@ module RUML::Compiler
       line!
     end
 
+    # !!! helper, the emit is very simple.
     def emit_generalization node
       node_path = navigator.path_str(node)
       parent = node.namespace
@@ -263,6 +270,8 @@ module RUML::Compiler
       line! "  #{node_path}.#{op}(#{gen_path}#{subpath})" if gen_path
     end
 
+    # !!! template
+    # extract Ruby method body in Boot::Builder or eale
     def emit_operation(node)
       name = node.name.to_sym
       body = node._.body
@@ -277,11 +286,12 @@ end
 RUBY
     end
 
+    # !!! introspection or helper?
     def isOperation?(node)
       node._.body || node._.blk
     end
 
-    # !!! put this in Boot::Buildet?
+    # !!! put this in Boot::Builder?
     # Returns the body of the first do...end or {...} block in +code+,
     # without the block parameters or any trailing text after the block.
     def extract_method_body(code)
@@ -300,6 +310,7 @@ RUBY
       raise ArgumentError, "no block found in #{code.inspect}"
     end
 
+    # !!! template
     def emit_constant(node)
       name_upper = node.name.to_s.upper
       line! "module " << path_module(node)
@@ -313,6 +324,7 @@ RUBY
       line! "end"
     end
 
+    # !!! template logic
     def emit_attribute node, opts = {}
       if node.isDerived && isOperation?(node)
         emit_operation(node)
@@ -323,6 +335,7 @@ RUBY
       end
     end
 
+    # !!! mostly template some helper.
     def emit_property node, opts = {}
       
       node_path = namespace_str(node.class)
@@ -516,6 +529,8 @@ RUBY
       node._.isStatic ? parent._.ruby_module_behavior : parent._.ruby_instance_behavior
     end
 
+    # !!! template
+    # this shares signifcant structure with emit_property.
     def emit_association node
       e = node.opposite or raise
       o = node or raise
@@ -632,6 +647,7 @@ RUBY
       end * "\n      "
     end
 
+    # !!! already exists in notation.rb and primitive_types.rv
     def coerce_multiplicity_value x
       case x
       when nil, Integer then x
@@ -640,6 +656,7 @@ RUBY
       end
     end
 
+    # !!! this already exists in notation.rb
     def coerce_multiplicity m
     result = \
       case m
@@ -681,6 +698,7 @@ RUBY
       navigator.path_str(node)
     end
 
+    # !!! preprocessing or helper?
     def keywords
       @keywords ||= %w[
         if then else end begin
