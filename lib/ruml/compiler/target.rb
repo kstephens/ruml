@@ -9,6 +9,8 @@ require 'stringio'
 
 module RUML
   module Compiler
+    # !!! rename to Backend.  Target is confusing.
+    # Use an erb template, that has access to Introspection/Navigation.
     class Target
       include Support::Initialize, Support::Logging::Basic
 
@@ -31,6 +33,8 @@ module RUML
         raise
       end
 
+      # !!! dont need these for ERB.
+      # some may become helpers.
       def out
         @out ||= StringIO.new
       end
