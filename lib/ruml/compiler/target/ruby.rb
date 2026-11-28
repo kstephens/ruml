@@ -10,6 +10,15 @@ require 'ripper'
 require 'pp'
 
 module RUML::Compiler
+  # !!! change this to an ERB template
+  # this class can provide helpers, 
+  # access to introspection,
+  # traversal state.
+  # templates can emit comments to redirect
+  # sections to different files and/or blocks.
+  # the methods below are candidates for helper.
+  # however, these helpers might create data structures.
+  # perhaps, they can inject bindings into the caller.
   class Target::Ruby < Target
     UNLIMITED = 12345678901234567890
     STAR = UNLIMITED
@@ -18,11 +27,13 @@ module RUML::Compiler
 
     include RUML::Support::Misc
 
+    # !!! needs an output_dir atrr opt.
     def default_code_file(root)
       basename = root.to_s.gsub(/::/, '-').downcase
       f"tmp/#{basename}.rb"
     end
 
+    # !!! this should be a template:
     def emit_preamble(node)
       line! "# frozen_string_literal: true"
       line!
@@ -43,7 +54,10 @@ module RUML::Compiler
       line!
     end
 
+    
+    # !!! use introspection on Native objs
     def emit_root(node)
+      # !!! this should be a helper function.
       @root_node = root_node
       @root_path = navigator.path_str(@root_path)
       ns = frontend.root
@@ -267,6 +281,7 @@ RUBY
       node._.body || node._.blk
     end
 
+    # !!! put this in Boot::Buildet?
     # Returns the body of the first do...end or {...} block in +code+,
     # without the block parameters or any trailing text after the block.
     def extract_method_body(code)
@@ -309,16 +324,20 @@ RUBY
     end
 
     def emit_property node, opts = {}
+      
       node_path = namespace_str(node.class)
       node_type = node.type
       node_type = node_type[0] if ::Array === node_type # !!!
+      # !!! delete
       binding.pry unless find_node_scoped(node.class, node_type)
       node_type = find_node_scoped(node.class, node_type)
       type_name = navigator.native_path_or(node_type)
       primitive = navigator.isPrimitiveType?(node_type)
       enumeration = navigator.hasStereotype?(node_type, :enumeration)
 
+      # !!! delete
       # binding.pry if primitive
+      
       opts = {primitive: primitive}.merge(opts)
       primitive = opts[:primitive]
       name, type, lower, upper, default =
