@@ -29,7 +29,7 @@ module RUML::Core
       reraise e, "new(#{ns.inspect}, #{type.inspect}, #{props.inspect}, #{id.inspect}}"
     end
 
-    # rename to create()
+    # !!! rename to create()
     def make_instance ns, type, props, _id
       class_module(ns, type).new(props)
     end
@@ -43,7 +43,7 @@ module RUML::Core
       lookup_const(root_module(ns), type.to_s)
     end
 
-    # !!! rename namespace module.
+    # !!! rename namespace_module.
     def root_module ns
       # !!! coerce and cache ns here.
       @root_module[ns] ||= @root.const_get(ns.to_s.upcase.to_sym, false)
@@ -56,6 +56,7 @@ module RUML::Core
       RUML::Support::Misc.lookup_const(path, base)
     end
 
+    # !!! move this to an Introspection class.
     def associate dst, attr, obj, msg=nil
       sel = :"#{attr}_add!"
       dst.send(sel, obj)
@@ -63,6 +64,7 @@ module RUML::Core
       reraise e, "associate(#{dst.class}, #{attr.inspect}, #{obj.class}) : #{msg || "..."}"
     end
 
+    # !!! move to RUML::Error?
     def reraise e, msg
       raise RUML::FactoryError, "#{e.inspect} : #{msg}", e.backtrace
     end
