@@ -29,7 +29,9 @@ module RUML::Core
       reraise e, "new(#{ns.inspect}, #{type.inspect}, #{props.inspect}, #{id.inspect}}"
     end
 
-    # !!! rename to create()
+    # !!! rename to allocate()
+    # use ruby Class.allocate which does not call
+    # init.
     def make_instance ns, type, props, _id
       class_module(ns, type).new(props)
     end
